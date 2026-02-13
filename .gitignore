@@ -1,0 +1,82 @@
+# =========================
+# .NET / Visual Studio
+# =========================
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.cache
+*.pdb
+*.mdb
+*.nupkg
+*.snupkg
+*.nuspec
+project.lock.json
+project.fragment.lock.json
+artifacts/
+TestResults/
+BenchmarkDotNet.Artifacts/
+
+# ASP.NET
+appsettings.*.json.user
+secrets.json
+*.Development.json
+
+# =========================
+# IDEs
+# =========================
+# Visual Studio
+.vs/
+*.vsix
+.vscode/
+
+# JetBrains Rider / IntelliJ
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# ReSharper
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+
+# =========================
+# OS
+# =========================
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# =========================
+# Logs
+# =========================
+*.log
+logs/
+log/
+
+# =========================
+# Docker
+# =========================
+**/docker-data/
+**/docker-volume/
+**/.docker/
+
+# =========================
+# Generated / tooling
+# =========================
+Generated/
+*.generated.cs
+*.g.cs
+*.tmp
+*.temp
+
+# =========================
+# Certificates
+# =========================
+*.pfx
+*.cer
+*.crt
+*.key
