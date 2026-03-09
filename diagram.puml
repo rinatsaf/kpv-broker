@@ -1,0 +1,64 @@
+@startuml broker
+left to right direction
+skinparam componentStyle uml2
+skinparam shadowing false
+skinparam nodesep 70
+skinparam ranksep 90
+
+interface IProducer
+interface IConsumer
+interface IMessageStorage
+
+component Producer
+
+package "Broker.Client" {
+
+    component ProducerImpl
+    component ConsumerImpl
+    component "Config\nBroker connection" as ClientConfig
+}
+
+Producer -right-> IProducer
+IProducer -right-> ProducerImpl
+ProducerImpl -down-> ClientConfig
+
+package "Broker (gRPC сервис)" {
+
+    component "Компонент\nпринимающий запросы" as RequestReceiver
+    component "Диспетчер\nсоединений" as Dispatcher
+    component "Маршрутизатор" as Router
+    component "Обработчик\nочередей" as QueueHandler
+    component "Dead Letter\nQueue" as DLQ
+    component "Сборщик\nаналитики" as Analytics
+    component "API для админки" as AdminAPI
+}
+
+ProducerImpl -right-> RequestReceiver
+
+RequestReceiver -down-> Dispatcher
+Dispatcher -down-> Router
+Router -down-> QueueHandler
+
+QueueHandler -right-> DLQ
+QueueHandler -left-> IMessageStorage
+
+Analytics -up-> QueueHandler
+Analytics -right-> AdminAPI
+
+Router -right-> IConsumer
+IConsumer -right-> ConsumerImpl
+
+component Consumer
+ConsumerImpl -right-> Consumer
+
+ConsumerImpl -down-> ClientConfig
+
+component ControlUI
+ControlUI -right-> AdminAPI
+
+Producer -[hidden]-> Consumer
+RequestReceiver -[hidden]-> ConsumerImpl
+Dispatcher -[hidden]-> ConsumerImpl
+QueueHandler -[hidden]-> ConsumerImpl
+
+@enduml
