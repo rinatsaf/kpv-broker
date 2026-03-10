@@ -1,0 +1,55 @@
+@startuml diagram
+!theme plain
+left to right direction
+
+package "Контракты" {
+  interface "IConsumer" as IConsumer
+  interface "IPublisher" as IPublisher
+}
+
+package "Брокер (gRPC сервис)" as Broker {
+  
+  component "Обработчик очередей" as QueueHandler {
+  }
+
+  component "Dead Letter Queue" as DLQ {
+  }
+  
+  component "Сборщик аналитики" as Analytics {
+    component "API для администрирования" as AdminAPI
+  }
+  
+  component "Маршрутизатор" as Router {
+  }
+  
+  component "Конфигуратор" as RouterConfig {
+  }
+  
+  QueueHandler --> Router : маршрутизация сообщений
+  Analytics --> QueueHandler : сбор метрик
+  Router --> QueueHandler : получение сообщений
+  QueueHandler --> DLQ : отправка мёртвых сообщений
+}
+
+package "ProducerClient" {
+  component "Producer" as Producer
+}
+
+package "ConsumerClient" {
+  component "Consumer" as Consumer
+}
+
+package "MessageStorage" {
+  component "IMessageStorage" as IMessageStorage
+}
+
+package "Admin UI" as AdminUI {
+}
+
+Producer --> IPublisher : реализует
+Consumer --> IConsumer : реализует
+QueueHandler --> IMessageStorage : сохраняет сообщения
+IBrokerManager --> RouterConfig : управляет
+AdminUI --> AdminAPI : использует
+
+@enduml
