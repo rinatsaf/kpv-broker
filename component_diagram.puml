@@ -1,55 +1,77 @@
 @startuml diagram
 !theme plain
-left to right direction
+' left to right direction
 
-package "Контракты" {
+skinparam interface {
+  BackgroundColor LightGreen
+}
+
+skinparam note {
+  BackgroundColor Yellow
+}
+
+package "Контракты" as Contracts {
   interface "IConsumer" as IConsumer
   interface "IPublisher" as IPublisher
 }
 
-package "Брокер (gRPC сервис)" as Broker {
-  
-  component "Обработчик очередей" as QueueHandler {
-  }
+component "Брокер (gRPC сервис)" as Broker {
+  component "Компонент\nпринимающий запросы" as RequestReceiver #LightYellow
+  portin "Приём IPublisher" as pIn #lightgreen
 
-  component "Dead Letter Queue" as DLQ {
-  }
+  component "Обработчик очередей" as QueueHandler #LightYellow
   
-  component "Сборщик аналитики" as Analytics {
+  package "Сборщик аналитики" as Analytics {
     component "API для администрирования" as AdminAPI
   }
   
-  component "Маршрутизатор" as Router {
+  component "Маршрутизатор" as Router #LightYellow
+  portout "Отправка IConsumer" as pOut #lightgreen
+
+  component "Конфигуратор" as Config #LightYellow
+  note bottom of Config
+    Светло жёлтым 
+    помечены конфигурируемые
+    элементы
+  end note
+
+  database "MessageStorage" #lightblue {
+    component "Dead Letter Queue" as DLQ
+    component "Хранилище сообщений" as IMessageStorage
   }
   
-  component "Конфигуратор" as RouterConfig {
-  }
-  
+  RequestReceiver --> QueueHandler : передача сообщений в очередь
   QueueHandler --> Router : маршрутизация сообщений
-  Analytics --> QueueHandler : сбор метрик
-  Router --> QueueHandler : получение сообщений
-  QueueHandler --> DLQ : отправка мёртвых сообщений
+
+  QueueHandler --> Analytics : сбор метрик
+  QueueHandler --> DLQ : сохранение мёртвых сообщений
+  QueueHandler --> IMessageStorage
+
+  RequestReceiver <-- pIn : ожидает сообщения
+  pIn <-- IPublisher : ожидает сообщения
+
+  Router --> pOut : предоставляет сообщения
+  pOut --> IConsumer : предоставляет сообщения
 }
 
-package "ProducerClient" {
-  component "Producer" as Producer
+package "Broker.Client" as Library {
 }
+Library -- Contracts : предоставляет готовые удобные методы для IConsumer и IProducer
 
-package "ConsumerClient" {
-  component "Consumer" as Consumer
-}
+note bottom of Library
+  Библиотека в NuGet
+  для работы с сервисом
+end note
 
-package "MessageStorage" {
-  component "IMessageStorage" as IMessageStorage
-}
+node "ProducerClient" as Producer #red
+node "ConsumerClient" as Consumer #red
+Producer --> Library : использует
+Consumer --> Library : использует
 
-package "Admin UI" as AdminUI {
-}
-
-Producer --> IPublisher : реализует
-Consumer --> IConsumer : реализует
-QueueHandler --> IMessageStorage : сохраняет сообщения
-IBrokerManager --> RouterConfig : управляет
+node "Admin UI" as AdminUI
 AdminUI --> AdminAPI : использует
+
+interface IBrokerManager
+IBrokerManager --> Config : управляет
 
 @enduml
