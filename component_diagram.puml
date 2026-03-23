@@ -20,17 +20,17 @@ component "Брокер (gRPC сервис)" as Broker {
   portin "Приём IPublisher" as pIn #lightgreen
 
   component "Обработчик очередей" as QueueHandler #LightYellow
-  
+
   package "Сборщик аналитики" as Analytics {
     component "API для администрирования" as AdminAPI
   }
-  
+
   component "Маршрутизатор" as Router #LightYellow
   portout "Отправка IConsumer" as pOut #lightgreen
 
   component "Конфигуратор" as Config #LightYellow
   note bottom of Config
-    Светло жёлтым 
+    Светло жёлтым
     помечены конфигурируемые
     элементы
   end note
@@ -39,7 +39,7 @@ component "Брокер (gRPC сервис)" as Broker {
     component "Dead Letter Queue" as DLQ
     component "Хранилище сообщений" as IMessageStorage
   }
-  
+
   RequestReceiver --> QueueHandler : передача сообщений в очередь
   QueueHandler --> Router : маршрутизация сообщений
 
@@ -54,9 +54,9 @@ component "Брокер (gRPC сервис)" as Broker {
   pOut --> IConsumer : предоставляет сообщения
 }
 
-package "Broker.Client" as Library {
-}
-Library -- Contracts : предоставляет готовые удобные методы для IConsumer и IProducer
+package "Broker.Client" as Library
+Library -- Contracts : предоставляет готовые удобные методы для IConsumer и IProducer\n а также инструменты для конфигурации подключения
+
 
 note bottom of Library
   Библиотека в NuGet
