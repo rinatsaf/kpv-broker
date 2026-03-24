@@ -212,31 +212,34 @@ message MessageEvent {
     int64 received_at = 3;
 }
 
-// ==================== ГЛАВНЫЙ СЕРВИС ====================
+// ==================== СЕРВИСЫ ====================
 
-service BrokerService {
-    // =========== PUBLISHER ===========
+  service PublisherService {
     rpc Publish(PublishRequest) returns (PublishResponse);
     rpc PublishBatch(PublishBatchRequest) returns (PublishBatchResponse);
-    
-    // =========== CONSUMER ===========
+  }
+  
+  service ConsumerService {
     rpc Subscribe(SubscribeRequest) returns (stream MessageEvent);
     rpc Consume(ConsumeRequest) returns (ConsumeResponse);
     rpc Acknowledge(AcknowledgeRequest) returns (AcknowledgeResponse);
     rpc Reject(RejectRequest) returns (RejectResponse);
-    
-    // =========== QUEUE MANAGEMENT ===========
+  }
+  
+  service QueueService {
     rpc CreateQueue(CreateQueueRequest) returns (CreateQueueResponse);
     rpc DeleteQueue(DeleteQueueRequest) returns (DeleteQueueResponse);
     rpc GetQueueInfo(GetQueueInfoRequest) returns (GetQueueInfoResponse);
     rpc ListQueues(ListQueuesRequest) returns (ListQueuesResponse);
     rpc PurgeQueue(PurgeQueueRequest) returns (PurgeQueueResponse);
-    
-    // =========== ADMIN & MONITORING ===========
+  }
+  
+  service MonitoringService {
     rpc GetMetrics(GetMetricsRequest) returns (GetMetricsResponse);
     rpc GetBrokerStatus(GetBrokerStatusRequest) returns (BrokerStatus);
-    
-    // =========== CONFIGURATION ===========
+  }
+  
+  service ConfigService {
     rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
     rpc UpdateConfig(UpdateConfigRequest) returns (UpdateConfigResponse);
-}
+  }

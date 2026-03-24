@@ -1,0 +1,164 @@
+﻿// using Broker.Contracts;
+//
+// namespace Broker.Engine.Storage;
+//
+// /// <summary>
+// /// Компонент постоянного хранения сообщений.
+// /// Гарантирует: сообщение сохранено на диск → можно доставлять консьюмерам.
+// /// </summary>
+// public interface IMessageStorage : IAsyncDisposable
+// {
+//     // ==================== ЗАПИСЬ ====================
+//
+//     /// <summary>
+//     /// Сохраняет сообщение в хранилище.
+//     /// Возвращает успех только после фиксации на диске.
+//     /// </summary>
+//     Task<StorageResult> StoreAsync(
+//         Message message,
+//         string queueName,
+//         CancellationToken ct = default);
+//
+//     /// <summary>
+//     /// Пакетное сохранение сообщений (оптимизировано для диска).
+//     /// </summary>
+//     Task<BatchStorageResult> StoreBatchAsync(
+//         IEnumerable<Message> messages,
+//         string queueName,
+//         CancellationToken ct = default);
+//
+//     // ==================== ЧТЕНИЕ ДЛЯ КОНСЬЮМЕРОВ ====================
+//
+//     /// <summary>
+//     /// Получает сообщения для доставки консьюмеру.
+//     /// Сообщения помечаются как "в обработке" (не удаляются).
+//     /// </summary>
+//     Task<IReadOnlyList<Message>> FetchAsync(
+//         string queueName,
+//         string consumerGroup,
+//         string consumerId,
+//         int maxCount,
+//         TimeSpan visibilityTimeout,
+//         CancellationToken ct = default);
+//
+//     /// <summary>
+//     /// Получает одно сообщение для синхронного Consume-режима.
+//     /// </summary>
+//     Task<Message?> FetchOneAsync(
+//         string queueName,
+//         string consumerGroup,
+//         string consumerId,
+//         TimeSpan visibilityTimeout,
+//         CancellationToken ct = default);
+//
+//     // ==================== ПОДТВЕРЖДЕНИЕ / ОТКЛОНЕНИЕ ====================
+//
+//     /// <summary>
+//     /// Подтверждает успешную обработку сообщения.
+//     /// Сообщение удаляется из очереди.
+//     /// </summary>
+//     Task<AckResult> AcknowledgeAsync(
+//         string messageId,
+//         string queueName,
+//         string consumerId,
+//         CancellationToken ct = default);
+//
+//     /// <summary>
+//     /// Отклоняет сообщение с обработкой ошибки.
+//     /// </summary>
+//     Task<RejectResult> RejectAsync(
+//         string messageId,
+//         string queueName,
+//         string consumerId,
+//         bool requeue,
+//         string? reason = null,
+//         CancellationToken ct = default);
+//
+//     // ==================== УПРАВЛЕНИЕ ОЧЕРЕДЯМИ ====================
+//
+//     /// <summary>
+//     /// Создаёт новую очередь с настройками.
+//     /// </summary>
+//     Task<bool> CreateQueueAsync(
+//         QueueConfig config,
+//         CancellationToken ct = default);
+//
+//     /// <summary>
+//     /// Удаляет очередь и все её сообщения.
+//     /// </summary>
+//     Task<bool> DeleteQueueAsync(
+//         string queueName,
+//         CancellationToken ct = default);
+//
+//     /// <summary>
+//     /// Возвращает информацию о очереди.
+//     /// </summary>
+//     Task<QueueInfo> GetQueueInfoAsync(
+//         string queueName,
+//         CancellationToken ct = default);
+//
+//     /// <summary>
+//     /// Список всех очередей (пагинация).
+//     /// </summary>
+//     Task<QueuePage> ListQueuesAsync(
+//         int pageSize,
+//         string? pageToken = null,
+//         CancellationToken ct = default);
+//
+//     /// <summary>
+//     /// Очищает очередь (удаляет все сообщения, но не саму очередь).
+//     /// </summary>
+//     Task<int> PurgeQueueAsync(
+//         string queueName,
+//         CancellationToken ct = default);
+//
+//     // ==================== DEAD LETTER QUEUE ====================
+//
+//     /// <summary>
+//     /// Перемещает сообщение в DLQ после исчерпания попыток.
+//     /// </summary>
+//     Task<bool> MoveToDeadLetterAsync(
+//         string messageId,
+//         string sourceQueue,
+//         string? reason = null,
+//         CancellationToken ct = default);
+//
+//     /// <summary>
+//     /// Получает сообщения из DLQ для анализа/повторной обработки.
+//     /// </summary>
+//     Task<IReadOnlyList<Message>> FetchFromDeadLetterAsync(
+//         string queueName,
+//         int maxCount,
+//         CancellationToken ct = default);
+//
+//     // ==================== МЕТРИКИ И МОНИТОРИНГ ====================
+//
+//     /// <summary>
+//     /// Возвращает статистику по очереди.
+//     /// </summary>
+//     Task<QueueStats> GetStatsAsync(
+//         string queueName,
+//         CancellationToken ct = default);
+//
+//     /// <summary>
+//     /// Возвращает глобальные метрики хранилища.
+//     /// </summary>
+//     Task<StorageMetrics> GetMetricsAsync(
+//         CancellationToken ct = default);
+//
+//     // ==================== ОБСЛУЖИВАНИЕ ====================
+//
+//     /// <summary>
+//     /// Удаляет просроченные сообщения (TTL).
+//     /// Запускать периодически (background job).
+//     /// </summary>
+//     Task<int> ExpireMessagesAsync(
+//         CancellationToken ct = default);
+//
+//     /// <summary>
+//     /// Возвращает "зависшие" сообщения, у которых истёк visibility timeout.
+//     /// Они становятся доступны для повторной доставки.
+//     /// </summary>
+//     Task<int> ReleaseStuckMessagesAsync(
+//         CancellationToken ct = default);
+// }
