@@ -1,5 +1,5 @@
 using Broker.Contracts;
-using Broker.Engine.Storage;
+using Core.Abstractions;
 
 namespace Engine.MessageStorage;
 

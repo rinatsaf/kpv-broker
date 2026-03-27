@@ -1,6 +1,6 @@
 ﻿using Broker.Contracts;
 
-namespace Broker.Engine.Storage;
+namespace Core.Abstractions;
 
 /// <summary>
 /// Компонент постоянного хранения сообщений.
