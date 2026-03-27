@@ -53,6 +53,7 @@ message ConsumeRequest {
     string consumer_group = 2;
     int32 max_messages = 3;           // Максимум сообщений за раз
     int64 timeout_ms = 4;             // Таймаут ожидания
+    string consumer_id = 5;          
 }
 
 message ConsumeResponse {
