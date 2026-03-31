@@ -4,5 +4,4 @@ builder.Services.AddGrpc();
 
 var app = builder.Build();
 
-
 app.Run();
