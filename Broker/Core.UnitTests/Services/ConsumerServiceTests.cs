@@ -4,6 +4,7 @@ using Core.Services;
 using Broker.Contracts;
 using Core.Abstractions;
 using Core.Services;
+using Assert = Xunit.Assert;
 using ConsumerService = Core.Services.ConsumerService;
 
 namespace Core.UnitTests.Services;
