@@ -8,7 +8,7 @@ public sealed class PublisherService(IMessageStorage messageStorage) : IPublishe
     
     public async Task<PublishResponse> PublishAsync(PublishRequest request, CancellationToken ct = default)
     {
-        if (request.Message is null || string.IsNullOrEmpty(request.Message.Queue))
+        if (request.Message is null || string.IsNullOrWhiteSpace(request.Message.Queue))
         {
             return new  PublishResponse()
             {
