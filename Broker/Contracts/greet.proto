@@ -144,14 +144,10 @@ message GetMetricsResponse {
     map<string, double> metrics = 1;
 }
 
-message ListQueuesRequest {
-    int32 page_size = 1;
-    string page_token = 2;
-}
+message ListQueuesRequest {}
 
 message ListQueuesResponse {
     repeated QueueInfo queues = 1;
-    string next_page_token = 2;
 }
 
 message QueueInfo {
