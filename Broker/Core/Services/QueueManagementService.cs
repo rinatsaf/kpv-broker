@@ -51,12 +51,12 @@ public class QueueManagementService(IMessageStorage messageStorage) : IQueueMana
             Name = request.Name,
         };
         
-        var infoAfterPurge = await messageStorage.GetQueueInfoAsync(req, ct);
+        var infoBeforePurge = await messageStorage.GetQueueInfoAsync(req, ct);
         var resp =  await messageStorage.PurgeQueueAsync(request, ct);
         
         if (resp)
         {
-            var infoBeforePurge = await messageStorage.GetQueueInfoAsync(req, ct);
+            var infoAfterPurge = await messageStorage.GetQueueInfoAsync(req, ct);
             return new PurgeQueueResponse
             {
                 MessagesRemoved = infoAfterPurge.MessageCount - infoBeforePurge.MessageCount
