@@ -21,6 +21,7 @@ public sealed class FileMessageStorage : IMessageStorage
 
     private readonly MessageWriter messageWriter;
     private readonly MessageReader messageReader;
+    private readonly MessageAckRejectMarker messageAckRejectMarker;
 
     public FileMessageStorage(string rootPath, JsonSerializerOptions? jsonOptions = null)
     {
@@ -37,6 +38,7 @@ public sealed class FileMessageStorage : IMessageStorage
 
         messageWriter = new MessageWriter(_rootPath, _jsonOptions, _queueLocks);
         messageReader = new MessageReader(_rootPath, _jsonOptions, _queueLocks);
+        messageAckRejectMarker = new MessageAckRejectMarker(_rootPath, _jsonOptions, _queueLocks);
     }
 
     // ==================== ЗАПИСЬ ====================
@@ -106,159 +108,16 @@ public sealed class FileMessageStorage : IMessageStorage
 
     // ==================== ПОДТВЕРЖДЕНИЕ / ОТКЛОНЕНИЕ ====================
 
-    public async Task<bool> TryAcknowledgeAsync(
-        AcknowledgeRequest request,
-        CancellationToken ct = default)
+    public Task<bool> TryAcknowledgeAsync(AcknowledgeRequest request, CancellationToken ct = default)
     {
         ThrowIfDisposed();
-
-        // Находим очередь по ID сообщения (сканируем все очереди или используем индекс)
-        var queueName = await FindMessageQueueAsync(request.MessageId, ct);
-        if (string.IsNullOrEmpty(queueName))
-            return false;
-
-        var queuePath = GetQueuePath(queueName);
-        var messagesFile = Path.Combine(queuePath, "messages.jsonl");
-        var @lock = GetQueueLock(queueName);
-
-        await @lock.WaitAsync(ct);
-        try
-        {
-            if (!File.Exists(messagesFile)) return false;
-
-            var lines = await File.ReadAllLinesAsync(messagesFile, ct);
-            var found = false;
-            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-
-            StoredMessage? stored = null;
-
-            for (int i = 0; i < lines.Length; i++)
-            {
-                if (string.IsNullOrWhiteSpace(lines[i])) continue;
-
-                stored = JsonSerializer.Deserialize<StoredMessage>(lines[i], _jsonOptions);
-                if (stored?.Id != request.MessageId) continue;
-
-                // Можно подтвердить только InFlight-сообщения этого консьюмера
-                if (stored.State != MessageState.InFlight ||
-                    stored.ConsumerId != request.ConsumerId)
-                    return false;
-
-                stored.State = MessageState.Acknowledged;
-                stored.AcknowledgedAt = now;
-                stored.ProcessingTimeMs = stored.LastDeliveredAt.HasValue
-                    ? (now - stored.LastDeliveredAt.Value) * 1000
-                    : 0;
-
-                lines[i] = JsonSerializer.Serialize(stored, _jsonOptions);
-                found = true;
-                break;
-            }
-
-            if (found)
-            {
-                // Физическое удаление подтверждённых сообщений
-                var activeLines = lines.Where(l =>
-                {
-                    if (string.IsNullOrWhiteSpace(l)) return false;
-                    var s = JsonSerializer.Deserialize<StoredMessage>(l, _jsonOptions);
-                    return s?.State != MessageState.Acknowledged;
-                }).ToList();
-
-                await WriteLinesAtomicAsync(messagesFile, activeLines, ct);
-                UpdateQueueStats(queueName, m =>
-                {
-                    m.AcknowledgedTotal++;
-                    UpdateAvgProcessingTime(m, stored!.ProcessingTimeMs);
-                });
-            }
-
-            return found;
-        }
-        finally { @lock.Release(); }
+        return messageAckRejectMarker.TryAcknowledgeAsync(request, ct);
     }
 
-    public async Task<bool> TryRejectAsync(
-        RejectRequest request,
-        CancellationToken ct = default)
+    public Task<bool> TryRejectAsync(RejectRequest request, CancellationToken ct = default)
     {
         ThrowIfDisposed();
-
-        var queueName = await FindMessageQueueAsync(request.MessageId, ct);
-        if (string.IsNullOrEmpty(queueName))
-            return false;
-
-        var queuePath = GetQueuePath(queueName);
-        var messagesFile = Path.Combine(queuePath, "messages.jsonl");
-        var @lock = GetQueueLock(queueName);
-        var queueMeta = LoadQueueMetadata(queueName);
-
-        await @lock.WaitAsync(ct);
-        try
-        {
-            if (!File.Exists(messagesFile)) return false;
-
-            var lines = await File.ReadAllLinesAsync(messagesFile, ct);
-            var modified = false;
-            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            var movedToDlq = false;
-
-            for (int i = 0; i < lines.Length; i++)
-            {
-                if (string.IsNullOrWhiteSpace(lines[i])) continue;
-
-                var stored = JsonSerializer.Deserialize<StoredMessage>(lines[i], _jsonOptions);
-                if (stored?.Id != request.MessageId) continue;
-
-                if (stored.State != MessageState.InFlight ||
-                    stored.ConsumerId != request.ConsumerId)
-                    return false;
-
-                var maxAttempts = queueMeta?.MaxDeliveryAttempts ?? 3;
-
-                if (request.Requeue && stored.DeliveryCount < maxAttempts)
-                {
-                    // Возврат в очередь с видимостью после небольшой задержки
-                    stored.State = MessageState.Pending;
-                    stored.VisibleUntil = now + 5; // 5 секунд backoff
-                    stored.ConsumerGroup = null;
-                    stored.ConsumerId = null;
-                }
-                else if (queueMeta?.DeadLetterEnabled == true && !string.IsNullOrEmpty(queueMeta.DeadLetterQueue))
-                {
-                    // Перемещение в DLQ
-                    stored.State = MessageState.DeadLetter;
-                    stored.DeadLetterReason = string.IsNullOrWhiteSpace(request.Reason)
-                        ? "Max retries exceeded"
-                        : request.Reason;
-                    stored.DeadLetterAt = now;
-                    movedToDlq = true;
-                }
-                else
-                {
-                    // Просто помечаем как отклонённое (будет удалено при очистке)
-                    stored.State = MessageState.Rejected;
-                }
-
-                stored.RejectedAt = now;
-                lines[i] = JsonSerializer.Serialize(stored, _jsonOptions);
-                modified = true;
-                break;
-            }
-
-            if (modified)
-            {
-                await WriteLinesAtomicAsync(messagesFile, lines, ct);
-                UpdateQueueStats(queueName, m =>
-                {
-                    m.RejectedTotal++;
-                    if (movedToDlq) UpdateQueueStats(queueMeta!.DeadLetterQueue!, meta => meta.PublishedTotal++);
-                });
-            }
-
-            return true;
-        }
-        finally { @lock.Release(); }
+        return messageAckRejectMarker.TryRejectAsync(request, ct);
     }
 
     // ==================== УПРАВЛЕНИЕ ОЧЕРЕДЯМИ ====================
@@ -718,12 +577,6 @@ public sealed class FileMessageStorage : IMessageStorage
     private SemaphoreSlim GetQueueLock(string queueName) =>
         _queueLocks.GetOrAdd(queueName, _ => new SemaphoreSlim(1, 1));
 
-    private static void EnsureQueueDirectory(string queuePath)
-    {
-        Directory.CreateDirectory(queuePath);
-        Directory.CreateDirectory(Path.Combine(queuePath, "indexes"));
-    }
-
     private QueueMetadata? LoadQueueMetadata(string queueName)
     {
         var metadataFile = Path.Combine(GetQueuePath(queueName), "metadata.json");
@@ -762,12 +615,6 @@ public sealed class FileMessageStorage : IMessageStorage
         catch { /* игнорируем ошибки статистики */ }
     }
 
-    private static void UpdateAvgProcessingTime(QueueMetadata meta, double newTimeMs)
-    {
-        // Скользящее среднее: new_avg = old_avg * 0.9 + new_value * 0.1
-        meta.AvgProcessingTimeMs = meta.AvgProcessingTimeMs * 0.9 + newTimeMs * 0.1;
-    }
-
     private static async Task WriteLinesAtomicAsync(string targetFile, IEnumerable<string> lines, CancellationToken ct)
     {
         if (!lines.Any())
@@ -779,39 +626,5 @@ public sealed class FileMessageStorage : IMessageStorage
         var tempFile = targetFile + ".tmp";
         await File.WriteAllLinesAsync(tempFile, lines, Encoding.UTF8, ct);
         File.Move(tempFile, targetFile, overwrite: true);
-    }
-
-    /// <summary>
-    /// Находит очередь, содержащую сообщение с указанным ID.
-    /// Для продакшена рекомендуется добавить индекс message_id → queue_name.
-    /// </summary>
-    private async Task<string?> FindMessageQueueAsync(string messageId, CancellationToken ct)
-    {
-        var queuesPath = Path.Combine(_rootPath, "queues");
-        if (!Directory.Exists(queuesPath)) return null;
-
-        foreach (var queueDir in Directory.GetDirectories(queuesPath))
-        {
-            var queueName = Path.GetFileName(queueDir);
-            var messagesFile = Path.Combine(queueDir, "messages.jsonl");
-
-            if (!File.Exists(messagesFile)) continue;
-
-            var @lock = GetQueueLock(queueName!);
-            await @lock.WaitAsync(ct);
-            try
-            {
-                var lines = await File.ReadAllLinesAsync(messagesFile, ct);
-                foreach (var line in lines)
-                {
-                    if (string.IsNullOrWhiteSpace(line)) continue;
-                    var stored = JsonSerializer.Deserialize<StoredMessage>(line, _jsonOptions);
-                    if (stored?.Id == messageId)
-                        return queueName;
-                }
-            }
-            finally { @lock.Release(); }
-        }
-        return null;
     }
 }
