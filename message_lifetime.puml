@@ -1,0 +1,116 @@
+@startuml MessageLifecycle
+skinparam state {
+  BackgroundColor<<created>> LightBlue
+  BackgroundColor<<active>> LightYellow
+  BackgroundColor<<terminal>> LightGray
+  BackgroundColor<<error>> LightCoral
+  ArrowColor #2C3E50
+  BorderColor #2C3E50
+}
+
+skinparam linetype ortho
+
+title Жизненный цикл сообщения
+footer %date()
+
+[*] --> Published : Publish/PublishBatch
+
+state "📦 Published" as Published <<created>> {
+  note right
+    Сообщение сохранено на диск
+    - ID сгенерирован
+    - Записано в messages.jsonl
+    - State = Pending
+  end note
+}
+
+Published --> Pending : фиксация на диске
+
+state "⏳ Pending" as Pending <<active>> {
+  note right
+    Ожидает доставки консьюмеру
+    Условия видимости:
+    - VisibleUntil <= now
+    - ExpiresAt > now (если задан TTL)
+    - State == Pending
+  end note
+}
+
+state "🚚 InFlight" as InFlight <<active>> {
+  note right
+    Доставлено консьюмеру
+    - DeliveryCount++
+    - VisibleUntil = now + timeout
+    - ConsumerId зафиксирован
+    - Нельзя выдать другому консьюмеру
+  end note
+}
+
+state "✅ Acknowledged" as Acknowledged <<terminal>> {
+  note right
+    Успешно обработано
+    - Физически удаляется из файла
+    - Статистика: AcknowledgedTotal++
+    - AvgProcessingTime обновляется
+  end note
+}
+
+state "❌ Rejected" as Rejected <<terminal>> {
+  note right
+    Отклонено без повторной очереди
+    - Реже: физическое удаление
+    - Статистика: RejectedTotal++
+  end note
+}
+
+state "💀 DeadLetter" as DeadLetter <<error>> {
+  note right
+    Перемещено в DLQ после:
+    - Исчерпания попыток (DeliveryCount >= MaxAttempts)
+    - Явного вызова MoveToDeadLetterAsync()
+    - Ошибки обработки с requeue=false
+  end note
+}
+
+state "🗑️ Expired" as Expired <<terminal>> {
+  note right
+    Удалено по TTL
+    - ExpiresAt <= now
+    - Очищается фоновой задачей ExpireMessagesAsync()
+    - Статистика: ExpiredTotal++
+  end note
+}
+
+' === Переходы ===
+Pending --> InFlight : FetchAsync/FetchOneAsync
+
+InFlight --> Acknowledged : TryAcknowledgeAsync\n(success=true)
+
+InFlight --> Pending : TryRejectAsync\n(requeue=true)
+
+InFlight --> Rejected : TryRejectAsync\n(requeue=false)
+
+InFlight --> DeadLetter : TryRejectAsync\n(requeue=true BUT\nDeliveryCount >= MaxAttempts)
+
+Pending --> Expired : TTL истёк\n(ExpiresAt <= now)\n[фоновая очистка]
+
+InFlight --> Pending : visibility timeout истёк,\nно не получен ack/nack\n[автоматический возврат]
+
+' === Прямые переходы в DLQ ===
+' Published --> DeadLetter : MoveToDeadLetterAsync()
+Pending --> DeadLetter : MoveToDeadLetterAsync()\n(до доставки)
+
+' === Удаление очереди ===
+Published --> [*] : DeleteQueueAsync()\n(все сообщения удалены)
+Pending --> [*] : PurgeQueueAsync()\n(очередь очищена)
+DeadLetter --> [*] : PurgeQueueAsync()\n(очистка DLQ)
+
+' === Легенда ===
+legend right
+  | <<created>> | Только создано |
+  | <<active>> | Активное состояние |
+  | <<terminal>> | Финальное (удаление) |
+  | <<error>> | Ошибка / DLQ |
+endlegend
+
+@enduml
