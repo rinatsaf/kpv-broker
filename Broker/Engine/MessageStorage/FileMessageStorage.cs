@@ -22,6 +22,7 @@ public sealed class FileMessageStorage : IMessageStorage
     private readonly MessageWriter messageWriter;
     private readonly MessageFetcher messageFetcher;
     private readonly MessageAckRejectMarker messageAckRejectMarker;
+    private readonly QueueManager queueManager;
 
     public FileMessageStorage(string rootPath, JsonSerializerOptions? jsonOptions = null)
     {
@@ -39,6 +40,7 @@ public sealed class FileMessageStorage : IMessageStorage
         messageWriter = new MessageWriter(_rootPath, _jsonOptions, _queueLocks);
         messageFetcher = new MessageFetcher(_rootPath, _jsonOptions, _queueLocks);
         messageAckRejectMarker = new MessageAckRejectMarker(_rootPath, _jsonOptions, _queueLocks);
+        queueManager = new QueueManager(_rootPath, _jsonOptions, _queueLocks);
     }
 
     // ==================== ЗАПИСЬ ====================
@@ -122,155 +124,34 @@ public sealed class FileMessageStorage : IMessageStorage
 
     // ==================== УПРАВЛЕНИЕ ОЧЕРЕДЯМИ ====================
 
-    public Task<bool> CreateQueueAsync(
-        CreateQueueRequest request,
-        CancellationToken ct = default)
+    public Task<bool> CreateQueueAsync(CreateQueueRequest request, CancellationToken ct = default)
     {
         ThrowIfDisposed();
-
-        var queuePath = GetQueuePath(request.Name);
-
-        try
-        {
-            Directory.CreateDirectory(queuePath);
-            Directory.CreateDirectory(Path.Combine(queuePath, "indexes"));
-
-            var metadata = new QueueMetadata
-            {
-                Name = request.Name,
-                CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                MaxSize = request.MaxSize,
-                MessageTtlSeconds = request.MessageTtlSeconds,
-                MaxDeliveryAttempts = request.MaxDeliveryAttempts > 0 ? request.MaxDeliveryAttempts : 3,
-                DeadLetterEnabled = request.DeadLetterEnabled,
-                DeadLetterQueue = request.DeadLetterEnabled ? request.DeadLetterQueue : null
-            };
-
-            var metadataFile = Path.Combine(queuePath, "metadata.json");
-            var json = JsonSerializer.Serialize(metadata, _jsonOptions);
-            File.WriteAllText(metadataFile, json, Encoding.UTF8);
-
-            return Task.FromResult(true);
-        }
-        catch (Exception) { return Task.FromResult(false); }
+        return queueManager.CreateQueueAsync(request, ct);
     }
 
-    public Task<bool> DeleteQueueAsync(
-        DeleteQueueRequest request,
-        CancellationToken ct = default)
+    public Task<bool> DeleteQueueAsync(DeleteQueueRequest request, CancellationToken ct = default)
     {
         ThrowIfDisposed();
-
-        var queuePath = GetQueuePath(request.Name);
-        var @lock = GetQueueLock(request.Name);
-
-        return Task.Run(() =>
-        {
-            try
-            {
-                @lock.Wait();
-                try
-                {
-                    if (Directory.Exists(queuePath))
-                    {
-                        Directory.Delete(queuePath, recursive: true);
-                    }
-                    _queueLocks.TryRemove(request.Name, out _);
-                    return true;
-                }
-                finally { @lock.Release(); }
-            }
-            catch (Exception) { return false; }
-        }, ct);
+        return queueManager.DeleteQueueAsync(request.Name, ct);
     }
 
-    public async Task<QueueInfo> GetQueueInfoAsync(
-        GetQueueInfoRequest request,
-        CancellationToken ct = default)
+    public Task<QueueInfo> GetQueueInfoAsync(GetQueueInfoRequest request, CancellationToken ct = default)
     {
         ThrowIfDisposed();
-
-        var queuePath = GetQueuePath(request.Name);
-        var metadataFile = Path.Combine(queuePath, "metadata.json");
-
-        if (!File.Exists(metadataFile))
-            throw new InvalidOperationException($"Queue '{request.Name}' not found");
-
-        var metadata = JsonSerializer.Deserialize<QueueMetadata>(
-            await File.ReadAllTextAsync(metadataFile, ct), _jsonOptions);
-
-        var stats = await GetStatsAsync(request.Name, ct);
-
-        return new QueueInfo
-        {
-            Name = request.Name,
-            MessageCount = stats.PublishedTotal,
-            IsDeadLetterQueue = metadata?.DeadLetterEnabled == true &&
-                               metadata?.DeadLetterQueue == request.Name
-        };
+        return queueManager.GetQueueInfoAsync(request.Name, ct);
     }
 
-    public async Task<ListQueuesResponse> ListQueuesAsync(
-        ListQueuesRequest request,
-        CancellationToken ct = default)
+    public Task<ListQueuesResponse> ListQueuesAsync(ListQueuesRequest request, CancellationToken ct = default)
     {
         ThrowIfDisposed();
-
-        var queuesPath = Path.Combine(_rootPath, "queues");
-        if (!Directory.Exists(queuesPath))
-            return new ListQueuesResponse();
-
-        var allQueues = Directory.GetDirectories(queuesPath)
-            .Select(Path.GetFileName)
-            .Where(name => !string.IsNullOrEmpty(name))
-            .OrderBy(n => n);
-
-        var queues = new List<QueueInfo>();
-        foreach (var name in allQueues)
-        {
-            var stats = await GetStatsAsync(name!, ct);
-            var meta = LoadQueueMetadata(name!);
-
-            queues.Add(new QueueInfo
-            {
-                Name = name!,
-                MessageCount = stats.PublishedTotal,
-                IsDeadLetterQueue = meta?.DeadLetterEnabled == true &&
-                                   meta?.DeadLetterQueue == name
-            });
-        }
-
-        return new ListQueuesResponse
-        {
-            Queues = { queues }
-        };
+        return queueManager.ListQueuesAsync(ct);
     }
 
-    public async Task<bool> PurgeQueueAsync(
-        PurgeQueueRequest request,
-        CancellationToken ct = default)
+    public Task<bool> PurgeQueueAsync(PurgeQueueRequest request, CancellationToken ct = default)
     {
         ThrowIfDisposed();
-
-        var queuePath = GetQueuePath(request.Name);
-        var messagesFile = Path.Combine(queuePath, "messages.jsonl");
-        var @lock = GetQueueLock(request.Name);
-
-        await @lock.WaitAsync(ct);
-        try
-        {
-            if (File.Exists(messagesFile))
-            {
-                var count = (await File.ReadAllLinesAsync(messagesFile, ct))
-                    .Count(l => !string.IsNullOrWhiteSpace(l));
-
-                File.Delete(messagesFile);
-                return true;
-            }
-            return true;
-        }
-        catch (Exception) { return false; }
-        finally { @lock.Release(); }
+        return queueManager.PurgeQueueAsync(request.Name, ct);        
     }
 
     // ==================== DEAD LETTER QUEUE ====================
