@@ -16,13 +16,13 @@ internal class MessageWriter(string rootPath, JsonSerializerOptions jsonOptions,
         await semaphore.WaitAsync(ct);
         try
         {
-            var queueMeta = LoadQueueMetadata(targetQueue);
+            var queueMeta = await LoadQueueMetadataAsync(targetQueue, ct);
 
             var stored = MessageConverter.ToStored(message, queueMeta);
             var line = JsonSerializer.Serialize(stored, _jsonOptions) + "\n";
 
             await AppendLinesAtomicAsync(messagesFilePath, [line], ct);
-            UpdateQueueMetadata(targetQueue, m => m.PublishedTotal++);
+            await UpdateQueueMetadataAsync(targetQueue, m => m.PublishedTotal++, ct);
 
             return true;
         }
@@ -39,7 +39,7 @@ internal class MessageWriter(string rootPath, JsonSerializerOptions jsonOptions,
         await semaphore.WaitAsync(ct);
         try
         {
-            var queueMeta = LoadQueueMetadata(targetQueue);
+            var queueMeta = await LoadQueueMetadataAsync(targetQueue, ct);
 
             var lines = new List<string>(messagesList.Count);
             foreach (var msg in messagesList)
@@ -49,7 +49,7 @@ internal class MessageWriter(string rootPath, JsonSerializerOptions jsonOptions,
             }
 
             await AppendLinesAtomicAsync(messagesFilePath, lines, ct);
-            UpdateQueueMetadata(targetQueue, m => m.PublishedTotal += messagesList.Count);
+            await UpdateQueueMetadataAsync(targetQueue, m => m.PublishedTotal += messagesList.Count, ct);
 
             return true;
         }
