@@ -23,6 +23,7 @@ public sealed class FileMessageStorage : IMessageStorage
     private readonly MessageFetcher messageFetcher;
     private readonly MessageAckRejectMarker messageAckRejectMarker;
     private readonly QueueManager queueManager;
+    private readonly DeadLetterQueueManager dlqManager;
 
     public FileMessageStorage(string rootPath, JsonSerializerOptions? jsonOptions = null)
     {
@@ -41,6 +42,7 @@ public sealed class FileMessageStorage : IMessageStorage
         messageFetcher = new MessageFetcher(_rootPath, _jsonOptions, _queueLocks);
         messageAckRejectMarker = new MessageAckRejectMarker(_rootPath, _jsonOptions, _queueLocks);
         queueManager = new QueueManager(_rootPath, _jsonOptions, _queueLocks);
+        dlqManager = new DeadLetterQueueManager(_rootPath, _jsonOptions, _queueLocks, messageWriter);
     }
 
     // ==================== ЗАПИСЬ ====================
@@ -91,7 +93,6 @@ public sealed class FileMessageStorage : IMessageStorage
         CancellationToken ct = default)
     {
         ThrowIfDisposed();
-
         return messageFetcher.FetchAsync(queueName, consumerGroup, consumerId, maxCount, visibilityTimeout, ct);
     }
 
@@ -156,175 +157,27 @@ public sealed class FileMessageStorage : IMessageStorage
 
     // ==================== DEAD LETTER QUEUE ====================
 
-    public async Task<bool> MoveToDeadLetterAsync(
-        Message message,
-        CancellationToken ct = default)
+    public Task<bool> MoveToDeadLetterAsync(Message message, CancellationToken ct = default)
     {
         ThrowIfDisposed();
-
-        var queueName = message.Queue;
-        if (string.IsNullOrEmpty(queueName)) return false;
-
-        var queuePath = GetQueuePath(queueName);
-        var messagesFile = Path.Combine(queuePath, "messages.jsonl");
-        var @lock = GetQueueLock(queueName);
-        var queueMeta = LoadQueueMetadata(queueName);
-
-        await @lock.WaitAsync(ct);
-        try
-        {
-            if (!File.Exists(messagesFile) || !queueMeta?.DeadLetterEnabled == true)
-                return false;
-
-            var lines = await File.ReadAllLinesAsync(messagesFile, ct);
-            var modified = false;
-            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-
-            for (int i = 0; i < lines.Length; i++)
-            {
-                if (string.IsNullOrWhiteSpace(lines[i])) continue;
-
-                var stored = JsonSerializer.Deserialize<StoredMessage>(lines[i], _jsonOptions);
-                if (stored?.Id != message.Id) continue;
-
-                stored.State = MessageState.DeadLetter;
-                stored.DeadLetterReason = message.Headers.TryGetValue("LastError", out var err) ? err : "Manual move to DLQ";
-                stored.DeadLetterAt = now;
-
-                lines[i] = JsonSerializer.Serialize(stored, _jsonOptions);
-                modified = true;
-                break;
-            }
-
-            if (modified)
-            {
-                await WriteLinesAtomicAsync(messagesFile, lines, ct);
-
-                // Если указана отдельная DLQ-очередь, копируем туда сообщение
-                if (!string.IsNullOrEmpty(queueMeta?.DeadLetterQueue) &&
-                    queueMeta.DeadLetterQueue != queueName)
-                {
-                    await TryStoreAsync(message, queueMeta.DeadLetterQueue, ct);
-                }
-            }
-
-            return true;
-        }
-        catch (Exception) { return false; }
-        finally { @lock.Release(); }
+        return dlqManager.MoveToDeadLetterAsync(message, ct);
     }
 
-    public async Task<IReadOnlyList<Message>> FetchFromDeadLetterAsync(
+    public Task<IReadOnlyList<Message>> FetchFromDeadLetterAsync(
         string queueName,
         int maxCount,
         CancellationToken ct = default)
     {
         ThrowIfDisposed();
-
-        var queuePath = GetQueuePath(queueName);
-        var messagesFile = Path.Combine(queuePath, "messages.jsonl");
-        var @lock = GetQueueLock(queueName);
-
-        await @lock.WaitAsync(ct);
-        try
-        {
-            if (!File.Exists(messagesFile))
-                return [];
-
-            var results = new List<Message>();
-            var lines = await File.ReadAllLinesAsync(messagesFile, ct);
-
-            foreach (var line in lines)
-            {
-                if (string.IsNullOrWhiteSpace(line)) continue;
-
-                var stored = JsonSerializer.Deserialize<StoredMessage>(line, _jsonOptions);
-                if (stored?.State == MessageState.DeadLetter)
-                {
-                    results.Add(MessageConverter.ToProto(stored));
-                    if (results.Count >= maxCount) break;
-                }
-            }
-
-            return results;
-        }
-        finally { @lock.Release(); }
+        return dlqManager.FetchFromDeadLetterAsync(queueName, maxCount, ct);
     }
 
     // ==================== МЕТРИКИ И МОНИТОРИНГ ====================
 
-    public async Task<QueueStats> GetStatsAsync(
-        string queueName,
-        CancellationToken ct = default)
+    public Task<QueueStats> GetStatsAsync(string queueName, CancellationToken ct = default)
     {
         ThrowIfDisposed();
-
-        var queuePath = GetQueuePath(queueName);
-        var messagesFile = Path.Combine(queuePath, "messages.jsonl");
-        var metadata = LoadQueueMetadata(queueName);
-
-        if (!File.Exists(messagesFile))
-        {
-            return new QueueStats
-            {
-                PublishedTotal = metadata?.PublishedTotal ?? 0,
-                ConsumedTotal = metadata?.ConsumedTotal ?? 0,
-                AcknowledgedTotal = metadata?.AcknowledgedTotal ?? 0,
-                RejectedTotal = metadata?.RejectedTotal ?? 0,
-                ExpiredTotal = metadata?.ExpiredTotal ?? 0,
-                AvgProcessingTimeMs = metadata?.AvgProcessingTimeMs ?? 0
-            };
-        }
-
-        var lines = await File.ReadAllLinesAsync(messagesFile, ct);
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-
-        long total = 0, visible = 0, inFlight = 0, deadLetter = 0, expired = 0;
-
-        foreach (var line in lines)
-        {
-            if (string.IsNullOrWhiteSpace(line)) continue;
-
-            var stored = JsonSerializer.Deserialize<StoredMessage>(line, _jsonOptions);
-            if (stored == null) continue;
-
-            total++;
-
-            if (stored.ExpiresAt.HasValue && stored.ExpiresAt.Value <= now)
-            {
-                expired++;
-                continue;
-            }
-
-            switch (stored.State)
-            {
-                case MessageState.Pending when stored.VisibleUntil <= now:
-                    visible++;
-                    break;
-                case MessageState.InFlight:
-                    inFlight++;
-                    break;
-                case MessageState.DeadLetter:
-                    deadLetter++;
-                    break;
-            }
-        }
-
-        return new QueueStats
-        {
-            PublishedTotal = metadata?.PublishedTotal ?? 0,
-            ConsumedTotal = metadata?.ConsumedTotal ?? 0,
-            AcknowledgedTotal = metadata?.AcknowledgedTotal ?? 0,
-            RejectedTotal = metadata?.RejectedTotal ?? 0,
-            ExpiredTotal = (metadata?.ExpiredTotal ?? 0) + expired,
-            AvgProcessingTimeMs = metadata?.AvgProcessingTimeMs ?? 0,
-
-            // Дополнительные поля для внутренней логики (можно добавить в proto при необходимости)
-            // TotalMessages = total,
-            // VisibleMessages = visible,
-            // InFlightMessages = inFlight,
-            // DeadLetterCount = deadLetter
-        };
+        return queueManager.GetStatsAsync(queueName, ct);
     }
 
     public async Task<GetMetricsResponse> GetMetricsAsync(CancellationToken ct = default)
@@ -457,19 +310,6 @@ public sealed class FileMessageStorage : IMessageStorage
 
     private SemaphoreSlim GetQueueLock(string queueName) =>
         _queueLocks.GetOrAdd(queueName, _ => new SemaphoreSlim(1, 1));
-
-    private QueueMetadata? LoadQueueMetadata(string queueName)
-    {
-        var metadataFile = Path.Combine(GetQueuePath(queueName), "metadata.json");
-        if (!File.Exists(metadataFile)) return null;
-
-        try
-        {
-            var json = File.ReadAllText(metadataFile, Encoding.UTF8);
-            return JsonSerializer.Deserialize<QueueMetadata>(json, _jsonOptions);
-        }
-        catch { return null; }
-    }
 
     private void UpdateQueueStats(string queueName, Action<QueueMetadata> update)
     {
