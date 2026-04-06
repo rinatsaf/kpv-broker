@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Broker.Contracts;
 using Core.Abstractions;
+using Engine.MessageStorage.Components;
 
 namespace Engine.MessageStorage;
 
@@ -18,6 +19,8 @@ public sealed class FileMessageStorage : IMessageStorage
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _queueLocks = new();
     private bool _disposed;
 
+    private readonly MessageWriter messageWriter;
+
     public FileMessageStorage(string rootPath, JsonSerializerOptions? jsonOptions = null)
     {
         _rootPath = Path.GetFullPath(rootPath);
@@ -30,11 +33,13 @@ public sealed class FileMessageStorage : IMessageStorage
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
             PropertyNameCaseInsensitive = true
         };
+
+        messageWriter = new MessageWriter(_rootPath, _jsonOptions, _queueLocks);
     }
 
     // ==================== ЗАПИСЬ ====================
 
-    public async Task<bool> TryStoreAsync(
+    public Task<bool> TryStoreAsync(
         Message message,
         string queueName,
         CancellationToken ct = default)
@@ -43,34 +48,12 @@ public sealed class FileMessageStorage : IMessageStorage
 
         var targetQueue = string.IsNullOrWhiteSpace(queueName) ? message.Queue : queueName;
         if (string.IsNullOrWhiteSpace(targetQueue))
-            return false;
+            return Task.FromResult(false);
 
-        var queuePath = GetQueuePath(targetQueue);
-        var messagesFile = Path.Combine(queuePath, "messages.jsonl");
-        var @lock = GetQueueLock(targetQueue);
-
-        await @lock.WaitAsync(ct);
-        try
-        {
-            EnsureQueueDirectory(queuePath);
-
-            // Загружаем метаданные очереди для применения настроек TTL
-            var queueMeta = LoadQueueMetadata(targetQueue);
-
-            var stored = MessageConverter.ToStored(message, queueMeta);
-            var line = JsonSerializer.Serialize(stored, _jsonOptions) + "\n";
-
-            await AppendLinesAtomicAsync(messagesFile, [line], ct);
-            UpdateQueueStats(targetQueue, m => m.PublishedTotal++);
-
-            return true;
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-        catch (Exception) { return false; }
-        finally { @lock.Release(); }
+        return messageWriter.StoreSingle(message, targetQueue, ct);
     }
 
-    public async Task<bool> TryStoreBatchAsync(
+    public Task<bool> TryStoreBatchAsync(
         IEnumerable<Message> messages,
         string queueName,
         CancellationToken ct = default)
@@ -78,40 +61,17 @@ public sealed class FileMessageStorage : IMessageStorage
         ThrowIfDisposed();
 
         var messagesList = messages.ToList();
-        if (messagesList.Count == 0) return true;
+        if (messagesList.Count == 0) 
+            return Task.FromResult(true);
 
         var targetQueue = string.IsNullOrWhiteSpace(queueName)
             ? messagesList.FirstOrDefault()?.Queue
             : queueName;
 
         if (string.IsNullOrWhiteSpace(targetQueue))
-            return false;
+            return Task.FromResult(false);
 
-        var queuePath = GetQueuePath(targetQueue);
-        var messagesFile = Path.Combine(queuePath, "messages.jsonl");
-        var @lock = GetQueueLock(targetQueue);
-
-        await @lock.WaitAsync(ct);
-        try
-        {
-            EnsureQueueDirectory(queuePath);
-            var queueMeta = LoadQueueMetadata(targetQueue);
-
-            var lines = new List<string>(messagesList.Count);
-            foreach (var msg in messagesList)
-            {
-                var stored = MessageConverter.ToStored(msg, queueMeta);
-                lines.Add(JsonSerializer.Serialize(stored, _jsonOptions) + "\n");
-            }
-
-            await AppendLinesAtomicAsync(messagesFile, lines, ct);
-            UpdateQueueStats(targetQueue, m => m.PublishedTotal += messagesList.Count);
-
-            return true;
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-        catch (Exception) { return false; }
-        finally { @lock.Release(); }
+        return messageWriter.StoreMultiple(messagesList, targetQueue, ct);
     }
 
     // ==================== ЧТЕНИЕ ДЛЯ КОНСЬЮМЕРОВ ====================
@@ -578,7 +538,7 @@ public sealed class FileMessageStorage : IMessageStorage
         try
         {
             if (!File.Exists(messagesFile))
-                return Array.Empty<Message>();
+                return [];
 
             var results = new List<Message>();
             var lines = await File.ReadAllLinesAsync(messagesFile, ct);
