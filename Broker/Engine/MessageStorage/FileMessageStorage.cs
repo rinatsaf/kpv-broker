@@ -20,7 +20,7 @@ public sealed class FileMessageStorage : IMessageStorage
     private bool _disposed;
 
     private readonly MessageWriter messageWriter;
-    private readonly MessageReader messageReader;
+    private readonly MessageFetcher messageFetcher;
     private readonly MessageAckRejectMarker messageAckRejectMarker;
 
     public FileMessageStorage(string rootPath, JsonSerializerOptions? jsonOptions = null)
@@ -37,7 +37,7 @@ public sealed class FileMessageStorage : IMessageStorage
         };
 
         messageWriter = new MessageWriter(_rootPath, _jsonOptions, _queueLocks);
-        messageReader = new MessageReader(_rootPath, _jsonOptions, _queueLocks);
+        messageFetcher = new MessageFetcher(_rootPath, _jsonOptions, _queueLocks);
         messageAckRejectMarker = new MessageAckRejectMarker(_rootPath, _jsonOptions, _queueLocks);
     }
 
@@ -90,7 +90,7 @@ public sealed class FileMessageStorage : IMessageStorage
     {
         ThrowIfDisposed();
 
-        return messageReader.FetchAsync(queueName, consumerGroup, consumerId, maxCount, visibilityTimeout, ct);
+        return messageFetcher.FetchAsync(queueName, consumerGroup, consumerId, maxCount, visibilityTimeout, ct);
     }
 
     public async Task<Message?> FetchOneAsync(
