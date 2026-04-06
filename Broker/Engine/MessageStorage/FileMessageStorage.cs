@@ -24,6 +24,7 @@ public sealed class FileMessageStorage : IMessageStorage
     private readonly MessageAckRejectMarker messageAckRejectMarker;
     private readonly QueueManager queueManager;
     private readonly DeadLetterQueueManager dlqManager;
+    private readonly MetricsCollector metricsCollector;
 
     public FileMessageStorage(string rootPath, JsonSerializerOptions? jsonOptions = null)
     {
@@ -43,6 +44,7 @@ public sealed class FileMessageStorage : IMessageStorage
         messageAckRejectMarker = new MessageAckRejectMarker(_rootPath, _jsonOptions, _queueLocks);
         queueManager = new QueueManager(_rootPath, _jsonOptions, _queueLocks);
         dlqManager = new DeadLetterQueueManager(_rootPath, _jsonOptions, _queueLocks, messageWriter);
+        metricsCollector = new MetricsCollector(_rootPath, _jsonOptions, _queueLocks, queueManager);
     }
 
     // ==================== ЗАПИСЬ ====================
@@ -180,37 +182,10 @@ public sealed class FileMessageStorage : IMessageStorage
         return queueManager.GetStatsAsync(queueName, ct);
     }
 
-    public async Task<GetMetricsResponse> GetMetricsAsync(CancellationToken ct = default)
+    public Task<GetMetricsResponse> GetMetricsAsync(CancellationToken ct = default)
     {
         ThrowIfDisposed();
-
-        var queuesPath = Path.Combine(_rootPath, "queues");
-        if (!Directory.Exists(queuesPath))
-            return new GetMetricsResponse();
-
-        var metrics = new Dictionary<string, double>();
-        long totalMessages = 0, totalQueues = 0;
-
-        foreach (var queueDir in Directory.GetDirectories(queuesPath))
-        {
-            var queueName = Path.GetFileName(queueDir);
-            var stats = await GetStatsAsync(queueName!, ct);
-
-            totalQueues++;
-            totalMessages += stats.PublishedTotal;
-
-            metrics[$"queue.{queueName}.published"] = stats.PublishedTotal;
-            metrics[$"queue.{queueName}.consumed"] = stats.ConsumedTotal;
-            metrics[$"queue.{queueName}.acknowledged"] = stats.AcknowledgedTotal;
-            metrics[$"queue.{queueName}.avg_processing_ms"] = stats.AvgProcessingTimeMs;
-        }
-
-        metrics["total.queues"] = totalQueues;
-        metrics["total.messages.published"] = totalMessages;
-        metrics["storage.path_length"] = _rootPath.Length;
-        metrics["timestamp"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-
-        return new GetMetricsResponse { Metrics = { metrics } };
+        return metricsCollector.GetMetricsAsync(ct);
     }
 
     // ==================== ОБСЛУЖИВАНИЕ ====================
