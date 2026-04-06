@@ -30,6 +30,7 @@ public class QueueManagementService(IMessageStorage messageStorage) : IQueueMana
         var info = await messageStorage.GetQueueInfoAsync(request, ct);
         var dlq = await messageStorage.FetchFromDeadLetterAsync(info.Name,Int32.MaxValue, ct);
         var stats = await messageStorage.GetStatsAsync(info.Name, ct);
+        
         return new GetQueueInfoResponse
         {
             Name = info.Name,
@@ -45,8 +46,25 @@ public class QueueManagementService(IMessageStorage messageStorage) : IQueueMana
 
     public async Task<PurgeQueueResponse> PurgeQueueAsync(PurgeQueueRequest request, CancellationToken ct = default)
     {
-        // return await messageStorage.PurgeQueueAsync(request, ct);
-        await Task.Delay(1000, ct);
-        throw new NotImplementedException();
+        var req = new GetQueueInfoRequest
+        {
+            Name = request.Name,
+        };
+        
+        var infoAfterPurge = await messageStorage.GetQueueInfoAsync(req, ct);
+        var resp =  await messageStorage.PurgeQueueAsync(request, ct);
+        
+        if (resp)
+        {
+            var infoBeforePurge = await messageStorage.GetQueueInfoAsync(req, ct);
+            return new PurgeQueueResponse
+            {
+                MessagesRemoved = infoAfterPurge.MessageCount - infoBeforePurge.MessageCount
+            };
+        }
+        return new PurgeQueueResponse
+        {
+            MessagesRemoved = 0
+        };
     }
 }
