@@ -455,16 +455,8 @@ public sealed class FileMessageStorage : IMessageStorage
             .Where(name => !string.IsNullOrEmpty(name))
             .OrderBy(n => n);
 
-        // Пагинация по page_token (используем имя очереди как токен)
-        var filtered = string.IsNullOrEmpty(request.PageToken)
-            ? allQueues
-            : allQueues.SkipWhile(n => n != request.PageToken).Skip(1);
-
-        var pageSize = request.PageSize > 0 ? request.PageSize : 50;
-        var paged = filtered.Take(pageSize).ToList();
-
         var queues = new List<QueueInfo>();
-        foreach (var name in paged)
+        foreach (var name in allQueues)
         {
             var stats = await GetStatsAsync(name!, ct);
             var meta = LoadQueueMetadata(name!);
@@ -478,14 +470,9 @@ public sealed class FileMessageStorage : IMessageStorage
             });
         }
 
-        var nextToken = paged.Count == pageSize && paged.Last() != allQueues.LastOrDefault()
-            ? paged.Last()
-            : string.Empty;
-
         return new ListQueuesResponse
         {
-            Queues = { queues },
-            NextPageToken = nextToken
+            Queues = { queues }
         };
     }
 
