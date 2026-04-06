@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text;
 using System.Text.Json;
 
 namespace Engine.MessageStorage.Components;
@@ -20,9 +21,7 @@ internal class BaseComponent(string rootPath, JsonSerializerOptions jsonOptions,
     protected SemaphoreSlim GetQueueSemaphore(string queueName) =>
         _queueLocks.GetOrAdd(queueName, _ => new SemaphoreSlim(1, 1));
 
-
     // ================== Metadata operations ==================
-
 
     protected async Task<QueueMetadata?> LoadQueueMetadataAsync(string queueName, CancellationToken ct)
     {

@@ -20,6 +20,7 @@ public sealed class FileMessageStorage : IMessageStorage
     private bool _disposed;
 
     private readonly MessageWriter messageWriter;
+    private readonly MessageReader messageReader;
 
     public FileMessageStorage(string rootPath, JsonSerializerOptions? jsonOptions = null)
     {
@@ -35,6 +36,7 @@ public sealed class FileMessageStorage : IMessageStorage
         };
 
         messageWriter = new MessageWriter(_rootPath, _jsonOptions, _queueLocks);
+        messageReader = new MessageReader(_rootPath, _jsonOptions, _queueLocks);
     }
 
     // ==================== ЗАПИСЬ ====================
@@ -76,7 +78,7 @@ public sealed class FileMessageStorage : IMessageStorage
 
     // ==================== ЧТЕНИЕ ДЛЯ КОНСЬЮМЕРОВ ====================
 
-    public async Task<IReadOnlyList<Message>> FetchAsync(
+    public Task<IReadOnlyList<Message>> FetchAsync(
         string queueName,
         string consumerGroup,
         string consumerId,
@@ -86,58 +88,7 @@ public sealed class FileMessageStorage : IMessageStorage
     {
         ThrowIfDisposed();
 
-        var queuePath = GetQueuePath(queueName);
-        var messagesFile = Path.Combine(queuePath, "messages.jsonl");
-        var @lock = GetQueueLock(queueName);
-
-        await @lock.WaitAsync(ct);
-        try
-        {
-            if (!File.Exists(messagesFile))
-                return [];
-
-            var results = new List<Message>(maxCount);
-            var lines = await File.ReadAllLinesAsync(messagesFile, ct);
-            var modified = false;
-            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            var visibleUntil = now + (long)visibilityTimeout.TotalSeconds;
-
-            for (int i = 0; i < lines.Length && results.Count < maxCount; i++)
-            {
-                if (string.IsNullOrWhiteSpace(lines[i])) continue;
-
-                var stored = JsonSerializer.Deserialize<StoredMessage>(lines[i], _jsonOptions);
-                if (stored == null) continue;
-
-                // Пропускаем: невидимые, истёкшие, не в состоянии Pending
-                if (stored.VisibleUntil > now ||
-                    (stored.ExpiresAt.HasValue && stored.ExpiresAt.Value <= now) ||
-                    stored.State != MessageState.Pending)
-                    continue;
-
-                // Помечаем как "в обработке"
-                stored.State = MessageState.InFlight;
-                stored.VisibleUntil = visibleUntil;
-                stored.DeliveryCount++;
-                stored.ConsumerGroup = consumerGroup;
-                stored.ConsumerId = consumerId;
-                stored.LastDeliveredAt = now;
-
-                lines[i] = JsonSerializer.Serialize(stored, _jsonOptions);
-                modified = true;
-
-                results.Add(MessageConverter.ToProto(stored));
-            }
-
-            if (modified)
-            {
-                await WriteLinesAtomicAsync(messagesFile, lines, ct);
-            }
-
-            UpdateQueueStats(queueName, m => m.ConsumedTotal += results.Count);
-            return results;
-        }
-        finally { @lock.Release(); }
+        return messageReader.FetchAsync(queueName, consumerGroup, consumerId, maxCount, visibilityTimeout, ct);
     }
 
     public async Task<Message?> FetchOneAsync(
@@ -827,19 +778,6 @@ public sealed class FileMessageStorage : IMessageStorage
 
         var tempFile = targetFile + ".tmp";
         await File.WriteAllLinesAsync(tempFile, lines, Encoding.UTF8, ct);
-        File.Move(tempFile, targetFile, overwrite: true);
-    }
-
-    private static async Task AppendLinesAtomicAsync(string targetFile, IEnumerable<string> lines, CancellationToken ct)
-    {
-        if (!lines.Any()) return;
-
-        var tempFile = targetFile + ".tmp";
-        if (File.Exists(targetFile))
-        {
-            File.Copy(targetFile, tempFile);
-        }
-        await File.AppendAllLinesAsync(tempFile, lines, Encoding.UTF8, ct);
         File.Move(tempFile, targetFile, overwrite: true);
     }
 

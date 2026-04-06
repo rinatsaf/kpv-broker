@@ -21,7 +21,7 @@ internal class MessageWriter(string rootPath, JsonSerializerOptions jsonOptions,
             var stored = MessageConverter.ToStored(message, queueMeta);
             var line = JsonSerializer.Serialize(stored, _jsonOptions) + "\n";
 
-            await AppendLinesAtomicAsync(messagesFilePath, [line], ct);
+            await SafeFileWriter.AppendLinesAsync(messagesFilePath, [line], ct);
             await UpdateQueueMetadataAsync(targetQueue, m => m.PublishedTotal++, ct);
 
             return true;
@@ -48,7 +48,7 @@ internal class MessageWriter(string rootPath, JsonSerializerOptions jsonOptions,
                 lines.Add(JsonSerializer.Serialize(stored, _jsonOptions) + "\n");
             }
 
-            await AppendLinesAtomicAsync(messagesFilePath, lines, ct);
+            await SafeFileWriter.AppendLinesAsync(messagesFilePath, lines, ct);
             await UpdateQueueMetadataAsync(targetQueue, m => m.PublishedTotal += messagesList.Count, ct);
 
             return true;
@@ -56,19 +56,5 @@ internal class MessageWriter(string rootPath, JsonSerializerOptions jsonOptions,
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception) { return false; }
         finally { semaphore.Release(); }
-    }
-
-    private static async Task AppendLinesAtomicAsync(string targetFile, IEnumerable<string> lines, CancellationToken ct)
-    {
-        if (!lines.Any()) return;
-        Directory.CreateDirectory(Directory.GetParent(targetFile)!.FullName);
-
-        var tempFile = targetFile + ".tmp";
-        if (File.Exists(targetFile))
-        {
-            File.Copy(targetFile, tempFile);
-        }
-        await File.AppendAllLinesAsync(tempFile, lines, Encoding.UTF8, ct);
-        File.Move(tempFile, targetFile, overwrite: true);
     }
 }

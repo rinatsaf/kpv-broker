@@ -1,0 +1,72 @@
+using System.Collections.Concurrent;
+using System.Text;
+using System.Text.Json;
+using Broker.Contracts;
+
+namespace Engine.MessageStorage.Components;
+
+internal class MessageReader(string rootPath, JsonSerializerOptions jsonOptions, ConcurrentDictionary<string, SemaphoreSlim> queueLocks)
+    : BaseComponent(rootPath, jsonOptions, queueLocks)
+{
+
+    public async Task<IReadOnlyList<Message>> FetchAsync(
+        string queueName,
+        string consumerGroup,
+        string consumerId,
+        int maxCount,
+        TimeSpan visibilityTimeout,
+        CancellationToken ct = default)
+    {
+        var messagesFile = GetQueueComponentPath(queueName, "messages.jsonl");
+        var semaphore = GetQueueSemaphore(queueName);
+
+        await semaphore.WaitAsync(ct);
+        try
+        {
+            if (!File.Exists(messagesFile))
+                return [];
+
+            var results = new List<Message>(maxCount);
+            var lines = await File.ReadAllLinesAsync(messagesFile, ct);
+            var modified = false;
+            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var visibleUntil = now + (long)visibilityTimeout.TotalSeconds;
+
+            for (int i = 0; i < lines.Length && results.Count < maxCount; i++)
+            {
+                if (string.IsNullOrWhiteSpace(lines[i])) continue;
+
+                var stored = JsonSerializer.Deserialize<StoredMessage>(lines[i], _jsonOptions);
+                if (stored == null) continue;
+
+                // Пропускаем: невидимые, истёкшие, не в состоянии Pending
+                if (stored.VisibleUntil > now ||
+                    (stored.ExpiresAt.HasValue && stored.ExpiresAt.Value <= now) ||
+                    stored.State != MessageState.Pending)
+                    continue;
+
+                // Помечаем как "в обработке"
+                stored.State = MessageState.InFlight;
+                stored.VisibleUntil = visibleUntil;
+                stored.DeliveryCount++;
+                stored.ConsumerGroup = consumerGroup;
+                stored.ConsumerId = consumerId;
+                stored.LastDeliveredAt = now;
+
+                lines[i] = JsonSerializer.Serialize(stored, _jsonOptions);
+                modified = true;
+
+                results.Add(MessageConverter.ToProto(stored));
+            }
+
+            if (modified)
+            {
+                await SafeFileWriter.WriteLinesAsync(messagesFile, lines, ct);
+            }
+
+            await UpdateQueueMetadataAsync(queueName, m => m.ConsumedTotal += results.Count, ct);
+            return results;
+        }
+        finally { semaphore.Release(); }
+    }
+}
