@@ -59,7 +59,7 @@ public class QueueManagementService(IMessageStorage messageStorage) : IQueueMana
             var infoAfterPurge = await messageStorage.GetQueueInfoAsync(req, ct);
             return new PurgeQueueResponse
             {
-                MessagesRemoved = infoAfterPurge.MessageCount - infoBeforePurge.MessageCount
+               MessagesRemoved = infoBeforePurge.MessageCount - infoAfterPurge.MessageCount
             };
         }
         return new PurgeQueueResponse
