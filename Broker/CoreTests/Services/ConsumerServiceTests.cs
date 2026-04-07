@@ -1,14 +1,10 @@
-﻿using Moq;
-using Xunit;
-using Core.Services;
-using Broker.Contracts;
+﻿using Broker.Contracts;
 using Core.Abstractions;
-using Core.Services;
+using Moq;
 using Assert = Xunit.Assert;
 using ConsumerService = Core.Services.ConsumerService;
 
-namespace Core.UnitTests.Services;
-
+namespace Core.Tests.Services;
 
 public class ConsumerServiceTests
 {
