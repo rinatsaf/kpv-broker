@@ -1,0 +1,52 @@
+@startuml Timeline
+skinparam packageStyle rectangle
+
+participant "Publisher" as Pub
+participant "Broker(Storage)" as Store
+participant "Consumer" as Cons
+participant "Background" as BG
+
+== Публикация ==
+Pub -> Store: TryStoreAsync(message)
+activate Store
+Store -> Store: Write to messages.jsonl\n(State=Pending)
+Store --> Pub: true
+deactivate Store
+
+== Доставка консьюмеру ==
+Cons -> Store: FetchAsync(queue, consumerId, visibilityTimeout)
+activate Store
+Store -> Store: Find Pending message\nMark as InFlight\nSet VisibleUntil
+Store --> Cons: List<Message>
+deactivate Store
+
+note right of Cons: Обрабатывает сообщение...
+
+== Успешная обработка ==
+Cons -> Store: TryAcknowledgeAsync(messageId, success=true)
+activate Store
+Store -> Store: Mark as Acknowledged\nRemove from file
+Store --> Cons: acknowledged=true
+deactivate Store
+
+== Альтернатива: Ошибка с повтором ==
+Cons -> Store: TryRejectAsync(messageId, requeue=true)
+activate Store
+Store -> Store: DeliveryCount < MaxAttempts?
+alt Да
+    Store -> Store: State=Pending
+    Store --> Cons: rejected=true, moved_to_dlq=false
+else Нет
+    Store -> Store: State=DeadLetter\nMove to DLQ
+    Store --> Cons: rejected=true, moved_to_dlq=true
+end
+deactivate Store
+
+== Фоновая очистка ==
+BG -> Store: ExpireMessagesAsync()
+activate Store
+Store -> Store: Remove where ExpiresAt <= now\nReturn InFlight with expired timeout
+Store --> BG: count of expired
+deactivate Store
+
+@enduml
