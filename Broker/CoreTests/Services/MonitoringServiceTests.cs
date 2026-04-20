@@ -1,6 +1,5 @@
 using Broker.Contracts;
 using Core.Abstractions;
-using Moq;
 using MonitoringService = Core.Services.MonitoringService;
 
 namespace Core.Tests.Services;

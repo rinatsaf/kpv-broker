@@ -1,6 +1,5 @@
 using Broker.Contracts;
 using Core.Abstractions;
-using Moq;
 using PublisherService = Core.Services.PublisherService;
 
 namespace Core.Tests.Services;
