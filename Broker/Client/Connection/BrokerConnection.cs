@@ -3,14 +3,9 @@ using Grpc.Net.Client;
 
 namespace Client.Connection;
 
-public sealed class BrokerConnection : IBrokerConnection
+public sealed class BrokerConnection(string address) : IBrokerConnection
 {
-    private readonly GrpcChannel _channel;
-
-    public BrokerConnection(string address)
-    {
-        _channel = GrpcChannel.ForAddress(address);
-    }
+    private readonly GrpcChannel _channel = GrpcChannel.ForAddress(address);
 
     public PublisherService.PublisherServiceClient GetPublisherClient() => 
         new(_channel);

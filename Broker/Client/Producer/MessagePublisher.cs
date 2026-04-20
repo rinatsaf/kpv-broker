@@ -17,7 +17,10 @@ public class MessagePublisher(IBrokerConnection connection) : IMessagePublisher
 
         if (headers != null)
         {
-            foreach (var (key, value) in headers) message.Headers.Add(key, value);
+            foreach (var (key, value) in headers)
+            {
+                message.Headers.Add(key, value);
+            }
         }
 
         return await PublishAsync(message);
