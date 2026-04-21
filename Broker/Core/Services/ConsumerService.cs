@@ -8,7 +8,7 @@ public sealed class ConsumerService(IMessageStorage messageStorage) : IConsumerS
 {
     private static readonly TimeSpan VisibilityTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan EmptyQueueDelay = TimeSpan.FromMilliseconds(250);
-    
+
     public async Task<ConsumeResponse> ConsumeAsync(ConsumeRequest request, CancellationToken ct = default)
     {
         // Валидация
@@ -18,7 +18,35 @@ public sealed class ConsumerService(IMessageStorage messageStorage) : IConsumerS
         {
             return new ConsumeResponse();
         }
-        
+
+        // Получаем сообщения из хранилища
+        var message = await messageStorage.FetchOneAsync(
+            request.Queue,
+            request.ConsumerGroup,
+            request.ConsumerId,
+            VisibilityTimeout,
+            ct);
+
+        var response = new ConsumeResponse()
+        {
+            ConsumerId = request.ConsumerId,
+            Message = message
+        };
+
+
+        return response;
+    }
+
+    public async Task<ConsumeBatchResponse> ConsumeBatchAsync(ConsumeBatchRequest request, CancellationToken ct = default)
+    {
+        // Валидация
+        if (string.IsNullOrWhiteSpace(request.ConsumerId) ||
+            string.IsNullOrWhiteSpace(request.Queue) ||
+            string.IsNullOrWhiteSpace(request.ConsumerGroup))
+        {
+            return new ConsumeBatchResponse();
+        }
+
         var maxMessages = request.MaxMessages > 0 ? request.MaxMessages : 1;
 
         // Получаем сообщения из хранилища
@@ -29,14 +57,14 @@ public sealed class ConsumerService(IMessageStorage messageStorage) : IConsumerS
             maxMessages,
             VisibilityTimeout,
             ct);
-        
-        var response = new ConsumeResponse()
+
+        var response = new ConsumeBatchResponse()
         {
             ConsumerId = request.ConsumerId,
         };
-        
+
         response.Messages.AddRange(messages);
-        
+
         return response;
     }
 
@@ -83,7 +111,7 @@ public sealed class ConsumerService(IMessageStorage messageStorage) : IConsumerS
         };
     }
 
-    public async IAsyncEnumerable<MessageEvent> SubscribeAsync(SubscribeRequest request,[EnumeratorCancellation] CancellationToken ct = default)
+    public async IAsyncEnumerable<MessageEvent> SubscribeAsync(SubscribeRequest request, [EnumeratorCancellation] CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(request.Queue) ||
             string.IsNullOrWhiteSpace(request.ConsumerGroup) ||
@@ -91,9 +119,9 @@ public sealed class ConsumerService(IMessageStorage messageStorage) : IConsumerS
         {
             yield break;
         }
-        
+
         var prefetchCount = request.PrefetchCount > 0 ? request.PrefetchCount : 1;
-        
+
         while (!ct.IsCancellationRequested)
         {
             var messages = await messageStorage.FetchAsync(

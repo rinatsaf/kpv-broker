@@ -51,12 +51,24 @@ message SubscribeRequest {
 message ConsumeRequest {
     string queue = 1;
     string consumer_group = 2;
+    int64 timeout_ms = 3;             // Таймаут ожидания
+    string consumer_id = 4;          
+}
+
+message ConsumeBatchRequest {
+    string queue = 1;
+    string consumer_group = 2;
     int32 max_messages = 3;           // Максимум сообщений за раз
     int64 timeout_ms = 4;             // Таймаут ожидания
     string consumer_id = 5;          
 }
 
 message ConsumeResponse {
+    Message message = 1;
+    string consumer_id = 2;
+}
+
+message ConsumeBatchResponse {
     repeated Message messages = 1;
     string consumer_id = 2;
 }
@@ -219,6 +231,7 @@ message MessageEvent {
   service ConsumerService {
     rpc Subscribe(SubscribeRequest) returns (stream MessageEvent);
     rpc Consume(ConsumeRequest) returns (ConsumeResponse);
+    rpc ConsumeBatch(ConsumeBatchRequest) returns (ConsumeBatchResponse);
     rpc Acknowledge(AcknowledgeRequest) returns (AcknowledgeResponse);
     rpc Reject(RejectRequest) returns (RejectResponse);
   }
