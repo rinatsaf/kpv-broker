@@ -1,41 +1,27 @@
+using Api.Connection;
+using Api.MonitoringClient;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+builder.Services.AddSingleton<IBrokerConnection>(new BrokerConnection("http://localhost:5113"));
+builder.Services.AddSingleton<MonitoringClient>();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-}
-
 app.UseHttpsRedirection();
 
-var summaries = new[]
+app.MapGet("/metrics/{queueName}",  async (MonitoringClient client, string queueName) =>
 {
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+    var ctx = new CancellationTokenSource();
+    var m = await client.GetMetricsAsync(queueName, 0, long.MaxValue,  ctx.Token);
+    return Results.Ok(m);
+});
 
-app.MapGet("/weatherforecast", () =>
-    {
-        var forecast = Enumerable.Range(1, 5).Select(index =>
-                new WeatherForecast
-                (
-                    DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-                    Random.Shared.Next(-20, 55),
-                    summaries[Random.Shared.Next(summaries.Length)]
-                ))
-            .ToArray();
-        return forecast;
-    })
-    .WithName("GetWeatherForecast");
+app.MapGet("/status",  async (MonitoringClient client) =>
+{
+    var ctx = new CancellationTokenSource();
+    var m = await client.GetBrokerStatus(ctx.Token);
+    return Results.Ok(m);
+});
 
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
