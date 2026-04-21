@@ -8,6 +8,10 @@ public interface IConsumerService
         ConsumeRequest request,
         CancellationToken ct = default);
 
+    Task<ConsumeBatchResponse> ConsumeBatchAsync(
+        ConsumeBatchRequest request,
+        CancellationToken ct = default);
+
     Task<AcknowledgeResponse> AcknowledgeAsync(
         AcknowledgeRequest request,
         CancellationToken ct = default);

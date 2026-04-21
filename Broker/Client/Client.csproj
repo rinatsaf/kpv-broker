@@ -6,4 +6,20 @@
         <Nullable>enable</Nullable>
     </PropertyGroup>
 
+    <ItemGroup>
+      <Folder Include="Models\" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Contracts\Contracts.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Grpc.Net.Client" Version="2.80.0-pre1" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Protobuf Include="..\Broker.Contracts\Protos\broker.proto" GrpcServices="Client" />
+    </ItemGroup>
+
 </Project>
