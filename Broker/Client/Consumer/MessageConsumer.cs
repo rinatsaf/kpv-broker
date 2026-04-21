@@ -37,7 +37,7 @@ public class MessageConsumer(IBrokerConnection connection) : IMessageConsumer
         int maxMessages,
         CancellationToken ct)
     {
-        var result = await _client.ConsumeAsync(new ConsumeRequest
+        var result = await _client.ConsumeBatchAsync(new ConsumeBatchRequest()
         {
             Queue = queue,
             ConsumerGroup = consumerGroup,
