@@ -23,7 +23,6 @@ public class ConsumerServiceTests
         var result = await _service.ConsumeAsync(request);
         
         Assert.NotNull(result);
-        Assert.Empty(result.Messages);
         // проверка, обращались ли к хранилищу
         _storageMock.Verify(s => s.FetchAsync(It.IsAny<string>(), It.IsAny<string>(), 
                 It.IsAny<string>(), It.IsAny<int>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), 
@@ -31,17 +30,17 @@ public class ConsumerServiceTests
     }
 
     [Fact] // тест на корректную передачу данных в хранилище ()
-    public async Task ConsumeAsync_WhenMaxMessagesIsZero_ShouldUseOne()
+    public async Task ConsumeBatchAsync_WhenMaxMessagesIsZero_ShouldUseOne()
     {
-        var request = new ConsumeRequest 
+        var request = new ConsumeBatchRequest 
         { 
-            ConsumerId = "c1", Queue = "q1", ConsumerGroup = "g1", MaxMessages = 0 
+            ConsumerId = "c1", Queue = "q1", ConsumerGroup = "g1", MaxMessages = 0
         };
         
         _storageMock.Setup(s => s.FetchAsync("q1", "g1", "c1", 1, It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Message>());
         
-        await _service.ConsumeAsync(request);
+        await _service.ConsumeBatchAsync(request);
 
         // проверка, что в FetchAsync ушла 1
         _storageMock.Verify(s => s.FetchAsync(It.IsAny<string>(), It.IsAny<string>(), 
