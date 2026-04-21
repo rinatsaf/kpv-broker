@@ -11,6 +11,7 @@ internal class MessageWriter(string rootPath, JsonSerializerOptions jsonOptions,
     {
         var messagesFilePath = GetQueueComponentPath(targetQueue, "messages.jsonl");
         var semaphore = GetQueueSemaphore(targetQueue);
+        var written = false;
 
         await semaphore.WaitAsync(ct);
         try
@@ -21,19 +22,23 @@ internal class MessageWriter(string rootPath, JsonSerializerOptions jsonOptions,
             var line = JsonSerializer.Serialize(stored, _jsonOptions) + "\n";
 
             await SafeFileWriter.AppendLinesAsync(messagesFilePath, [line], ct);
-            await UpdateQueueMetadataAsync(targetQueue, m => m.PublishedTotal++, ct);
-
-            return true;
+            written = true;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception) { return false; }
         finally { semaphore.Release(); }
+
+        if (written)
+            await UpdateQueueMetadataAsync(targetQueue, m => m.PublishedTotal++, ct);
+
+        return true;
     }
 
     public async Task<bool> StoreMultiple(List<Message> messagesList, string targetQueue, CancellationToken ct)
     {
         var messagesFilePath = GetQueueComponentPath(targetQueue, "messages.jsonl");
         var semaphore = GetQueueSemaphore(targetQueue);
+        var written = false;
 
         await semaphore.WaitAsync(ct);
         try
@@ -48,12 +53,15 @@ internal class MessageWriter(string rootPath, JsonSerializerOptions jsonOptions,
             }
 
             await SafeFileWriter.AppendLinesAsync(messagesFilePath, lines, ct);
-            await UpdateQueueMetadataAsync(targetQueue, m => m.PublishedTotal += messagesList.Count, ct);
-
-            return true;
+            written = true;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception) { return false; }
         finally { semaphore.Release(); }
+
+        if (written)
+            await UpdateQueueMetadataAsync(targetQueue, m => m.PublishedTotal += messagesList.Count, ct);
+
+        return true;
     }
 }

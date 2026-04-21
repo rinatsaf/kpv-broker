@@ -23,14 +23,15 @@ internal class ExpiredMessageCleaner(string rootPath, JsonSerializerOptions json
             if (!File.Exists(messagesFile)) continue;
 
             var semaphore = GetQueueSemaphore(queueName!);
+            var expiredInQueue = 0;
             await semaphore.WaitAsync(ct);
 
             try
             {
                 var lines = await File.ReadAllLinesAsync(messagesFile, ct);
                 var originalCount = lines.Count(l => !string.IsNullOrWhiteSpace(l));
-
                 var activeLines = new List<string>();
+                var stateChanged = false;
 
                 foreach (var line in lines)
                 {
@@ -39,34 +40,36 @@ internal class ExpiredMessageCleaner(string rootPath, JsonSerializerOptions json
                     var stored = JsonSerializer.Deserialize<StoredMessage>(line, _jsonOptions);
                     if (stored == null) continue;
 
-                    // Удаляем сообщения с истёкшим TTL
                     if (stored.ExpiresAt.HasValue && stored.ExpiresAt.Value <= now)
                     {
                         totalExpired++;
-                        await UpdateQueueMetadataAsync(queueName!, m => m.ExpiredTotal++, ct);
+                        expiredInQueue++;
                         continue;
                     }
 
-                    // Возвращаем "зависшие" InFlight-сообщения в Pending
                     if (stored.State == MessageState.InFlight && stored.VisibleUntil <= now)
                     {
                         stored.State = MessageState.Pending;
                         stored.VisibleUntil = now;
                         stored.ConsumerGroup = null;
                         stored.ConsumerId = null;
+                        stateChanged = true;
                     }
 
                     activeLines.Add(JsonSerializer.Serialize(stored, _jsonOptions));
                 }
 
-                if (activeLines.Count < originalCount)
+                if (activeLines.Count < originalCount || stateChanged)
                 {
                     await SafeFileWriter.WriteLinesAsync(messagesFile, activeLines, ct);
                 }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-            catch (Exception) { /* продолжаем обработку других очередей */ }
+            catch (Exception) { }
             finally { semaphore.Release(); }
+
+            if (expiredInQueue > 0)
+                await UpdateQueueMetadataAsync(queueName!, m => m.ExpiredTotal += expiredInQueue, ct);
         }
 
         return totalExpired;

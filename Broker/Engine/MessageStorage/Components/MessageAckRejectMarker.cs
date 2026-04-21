@@ -18,6 +18,8 @@ internal class MessageAckRejectMarker(string rootPath, JsonSerializerOptions jso
 
         var messagesFile = GetQueueComponentPath(queueName, "messages.jsonl");
         var semaphore = GetQueueSemaphore(queueName);
+        var found = false;
+        var processingTimeMs = 0d;
 
         await semaphore.WaitAsync(ct);
         try
@@ -25,7 +27,6 @@ internal class MessageAckRejectMarker(string rootPath, JsonSerializerOptions jso
             if (!File.Exists(messagesFile)) return false;
 
             var lines = await File.ReadAllLinesAsync(messagesFile, ct);
-            var found = false;
             var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
             StoredMessage? stored = null;
@@ -47,6 +48,7 @@ internal class MessageAckRejectMarker(string rootPath, JsonSerializerOptions jso
                 stored.ProcessingTimeMs = stored.LastDeliveredAt.HasValue
                     ? (now - stored.LastDeliveredAt.Value) * 1000
                     : 0;
+                processingTimeMs = stored.ProcessingTimeMs;
 
                 lines[i] = JsonSerializer.Serialize(stored, _jsonOptions);
                 found = true;
@@ -64,16 +66,20 @@ internal class MessageAckRejectMarker(string rootPath, JsonSerializerOptions jso
                 }).ToList();
 
                 await SafeFileWriter.WriteLinesAsync(messagesFile, activeLines, ct);
-                await UpdateQueueMetadataAsync(queueName, m =>
-                {
-                    m.AcknowledgedTotal++;
-                    UpdateAvgProcessingTime(m, stored!.ProcessingTimeMs);
-                }, ct);
             }
-
-            return found;
         }
         finally { semaphore.Release(); }
+
+        if (found)
+        {
+            await UpdateQueueMetadataAsync(queueName, m =>
+            {
+                m.AcknowledgedTotal++;
+                UpdateAvgProcessingTime(m, processingTimeMs);
+            }, ct);
+        }
+
+        return found;
     }
 
     private static void UpdateAvgProcessingTime(QueueMetadata meta, double newTimeMs)
@@ -94,6 +100,8 @@ internal class MessageAckRejectMarker(string rootPath, JsonSerializerOptions jso
         var messagesFile = Path.Combine(queuePath, "messages.jsonl");
         var @lock = GetQueueSemaphore(queueName);
         var queueMeta = await LoadQueueMetadataAsync(queueName, ct);
+        var modified = false;
+        var movedToDlq = false;
 
         await @lock.WaitAsync(ct);
         try
@@ -101,9 +109,7 @@ internal class MessageAckRejectMarker(string rootPath, JsonSerializerOptions jso
             if (!File.Exists(messagesFile)) return false;
 
             var lines = await File.ReadAllLinesAsync(messagesFile, ct);
-            var modified = false;
             var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            var movedToDlq = false;
 
             for (int i = 0; i < lines.Length; i++)
             {
@@ -151,14 +157,18 @@ internal class MessageAckRejectMarker(string rootPath, JsonSerializerOptions jso
             if (modified)
             {
                 await SafeFileWriter.WriteLinesAsync(messagesFile, lines, ct);
-                await UpdateQueueMetadataAsync(queueName, m => m.RejectedTotal++, ct);
-                if (movedToDlq)
-                    await UpdateQueueMetadataAsync(queueMeta!.DeadLetterQueue!, meta => meta.PublishedTotal++, ct);
             }
-
-            return true;
         }
         finally { @lock.Release(); }
+
+        if (modified)
+        {
+            await UpdateQueueMetadataAsync(queueName, m => m.RejectedTotal++, ct);
+            if (movedToDlq && !string.IsNullOrEmpty(queueMeta?.DeadLetterQueue))
+                await UpdateQueueMetadataAsync(queueMeta.DeadLetterQueue, meta => meta.PublishedTotal++, ct);
+        }
+
+        return true;
     }
 
 

@@ -17,6 +17,8 @@ internal class MessageFetcher(string rootPath, JsonSerializerOptions jsonOptions
     {
         var messagesFile = GetQueueComponentPath(queueName, "messages.jsonl");
         var semaphore = GetQueueSemaphore(queueName);
+        var results = new List<Message>(maxCount);
+        var consumedCount = 0;
 
         await semaphore.WaitAsync(ct);
         try
@@ -24,7 +26,6 @@ internal class MessageFetcher(string rootPath, JsonSerializerOptions jsonOptions
             if (!File.Exists(messagesFile))
                 return [];
 
-            var results = new List<Message>(maxCount);
             var lines = await File.ReadAllLinesAsync(messagesFile, ct);
             var modified = false;
             var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -62,9 +63,13 @@ internal class MessageFetcher(string rootPath, JsonSerializerOptions jsonOptions
                 await SafeFileWriter.WriteLinesAsync(messagesFile, lines, ct);
             }
 
-            await UpdateQueueMetadataAsync(queueName, m => m.ConsumedTotal += results.Count, ct);
-            return results;
+            consumedCount = results.Count;
         }
         finally { semaphore.Release(); }
+
+        if (consumedCount > 0)
+            await UpdateQueueMetadataAsync(queueName, m => m.ConsumedTotal += consumedCount, ct);
+
+        return results;
     }
 }
