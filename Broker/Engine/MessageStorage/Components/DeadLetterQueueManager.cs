@@ -4,8 +4,8 @@ using Broker.Contracts;
 
 namespace Engine.MessageStorage.Components;
 
-internal class DeadLetterQueueManager(string rootPath, JsonSerializerOptions jsonOptions, ConcurrentDictionary<string, SemaphoreSlim> queueLocks, MessageWriter messageWriter)
-    : BaseComponent(rootPath, jsonOptions, queueLocks)
+internal class DeadLetterQueueManager(string rootPath, JsonSerializerOptions jsonOptions, ConcurrentDictionary<string, SemaphoreSlim> queueLocks, MessageWriter messageWriter, ILogger<DeadLetterQueueManager> logger)
+    : BaseComponent(rootPath, jsonOptions, queueLocks, logger)
 {
     private MessageWriter _messageWriter = messageWriter;
 
@@ -59,7 +59,7 @@ internal class DeadLetterQueueManager(string rootPath, JsonSerializerOptions jso
 
             return true;
         }
-        catch (Exception) { return false; }
+        catch (Exception ex) { _logger.LogError(ex, "Failed to move message to dead letter queue for queue {Queue}", queueName); return false; }
         finally { semaphore.Release(); }
     }
 

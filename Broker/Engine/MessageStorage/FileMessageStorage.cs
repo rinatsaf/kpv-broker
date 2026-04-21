@@ -1,9 +1,10 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Broker.Contracts;
 using Core.Abstractions;
 using Engine.MessageStorage.Components;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace Engine.MessageStorage;
 
@@ -27,25 +28,31 @@ public sealed class FileMessageStorage : IMessageStorage
     private readonly ExpiredMessageCleaner expiredMessageCleaner;
 
     public FileMessageStorage(string rootPath, JsonSerializerOptions? jsonOptions = null)
+        : this(Options.Create(new FileMessageStorageOptions { RootPath = rootPath, JsonOptions = jsonOptions ?? new JsonSerializerOptions() }), NullLoggerFactory.Instance)
     {
-        _rootPath = Path.GetFullPath(rootPath);
-        Directory.CreateDirectory(_rootPath);
+    }
 
-        _jsonOptions = jsonOptions ?? new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            WriteIndented = false,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            PropertyNameCaseInsensitive = true
-        };
+    public FileMessageStorage(IOptions<FileMessageStorageOptions> options, ILoggerFactory loggerFactory)
+    {
+        var rootPath = Path.GetFullPath(options.Value.RootPath);
+        Directory.CreateDirectory(rootPath);
+        _rootPath = rootPath;
+        _jsonOptions = options.Value.JsonOptions;
 
-        messageWriter = new MessageWriter(_rootPath, _jsonOptions, _queueLocks);
-        messageFetcher = new MessageFetcher(_rootPath, _jsonOptions, _queueLocks);
-        messageAckRejectMarker = new MessageAckRejectMarker(_rootPath, _jsonOptions, _queueLocks);
-        queueManager = new QueueManager(_rootPath, _jsonOptions, _queueLocks);
-        dlqManager = new DeadLetterQueueManager(_rootPath, _jsonOptions, _queueLocks, messageWriter);
-        metricsCollector = new MetricsCollector(_rootPath, _jsonOptions, _queueLocks, queueManager);
-        expiredMessageCleaner = new ExpiredMessageCleaner(_rootPath, _jsonOptions, _queueLocks);
+        messageWriter = new MessageWriter(_rootPath, _jsonOptions, _queueLocks, 
+            loggerFactory.CreateLogger<MessageWriter>());
+        messageFetcher = new MessageFetcher(_rootPath, _jsonOptions, _queueLocks, 
+            loggerFactory.CreateLogger<MessageFetcher>());
+        messageAckRejectMarker = new MessageAckRejectMarker(_rootPath, _jsonOptions, _queueLocks, 
+            loggerFactory.CreateLogger<MessageAckRejectMarker>());
+        queueManager = new QueueManager(_rootPath, _jsonOptions, _queueLocks, 
+            loggerFactory.CreateLogger<QueueManager>());
+        dlqManager = new DeadLetterQueueManager(_rootPath, _jsonOptions, _queueLocks, messageWriter, 
+            loggerFactory.CreateLogger<DeadLetterQueueManager>());
+        metricsCollector = new MetricsCollector(_rootPath, _jsonOptions, _queueLocks, queueManager, 
+            loggerFactory.CreateLogger<MetricsCollector>());
+        expiredMessageCleaner = new ExpiredMessageCleaner(_rootPath, _jsonOptions, _queueLocks, 
+            loggerFactory.CreateLogger<ExpiredMessageCleaner>());
     }
 
     // ==================== ЗАПИСЬ ====================

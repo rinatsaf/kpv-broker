@@ -3,8 +3,8 @@ using System.Text.Json;
 
 namespace Engine.MessageStorage.Components;
 
-internal class ExpiredMessageCleaner(string rootPath, JsonSerializerOptions jsonOptions, ConcurrentDictionary<string, SemaphoreSlim> queueLocks)
-    : BaseComponent(rootPath, jsonOptions, queueLocks)
+internal class ExpiredMessageCleaner(string rootPath, JsonSerializerOptions jsonOptions, ConcurrentDictionary<string, SemaphoreSlim> queueLocks, ILogger<ExpiredMessageCleaner> logger)
+    : BaseComponent(rootPath, jsonOptions, queueLocks, logger)
 {
     public async Task<int> ExpireMessagesAsync(CancellationToken ct = default)
     {
@@ -65,7 +65,7 @@ internal class ExpiredMessageCleaner(string rootPath, JsonSerializerOptions json
                 }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-            catch (Exception) { }
+            catch (Exception ex) { _logger.LogError(ex, "Failed to expire messages in queue {Queue}", queueName); }
             finally { semaphore.Release(); }
 
             if (expiredInQueue > 0)

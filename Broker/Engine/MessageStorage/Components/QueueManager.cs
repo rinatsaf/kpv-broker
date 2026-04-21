@@ -5,8 +5,8 @@ using Broker.Contracts;
 
 namespace Engine.MessageStorage.Components;
 
-internal class QueueManager(string rootPath, JsonSerializerOptions jsonOptions, ConcurrentDictionary<string, SemaphoreSlim> queueLocks)
-    : BaseComponent(rootPath, jsonOptions, queueLocks)
+internal class QueueManager(string rootPath, JsonSerializerOptions jsonOptions, ConcurrentDictionary<string, SemaphoreSlim> queueLocks, ILogger<QueueManager> logger)
+    : BaseComponent(rootPath, jsonOptions, queueLocks, logger)
 {
     public async Task<bool> CreateQueueAsync(CreateQueueRequest request, CancellationToken ct = default)
     {
@@ -33,7 +33,7 @@ internal class QueueManager(string rootPath, JsonSerializerOptions jsonOptions, 
 
             return true;
         }
-        catch (Exception) { return false; }
+        catch (Exception ex) { _logger.LogError(ex, "Failed to create queue {Queue}", request.Name); return false; }
     }
 
     public async Task<bool> DeleteQueueAsync(string name, CancellationToken ct = default)
@@ -55,7 +55,7 @@ internal class QueueManager(string rootPath, JsonSerializerOptions jsonOptions, 
             }
             finally { semaphore.Release(); }
         }
-        catch (Exception) { return false; }
+        catch (Exception ex) { _logger.LogError(ex, "Failed to delete queue {Queue}", name); return false; }
     }
 
     public async Task<QueueInfo> GetQueueInfoAsync(string name, CancellationToken ct = default)
@@ -130,7 +130,7 @@ internal class QueueManager(string rootPath, JsonSerializerOptions jsonOptions, 
             }
             return true;
         }
-        catch (Exception) { return false; }
+        catch (Exception ex) { _logger.LogError(ex, "Failed to purge queue {Queue}", name); return false; }
         finally { semaphore.Release(); }
     }
 

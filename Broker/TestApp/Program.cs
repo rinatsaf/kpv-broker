@@ -9,7 +9,7 @@ var services = new ServiceCollection();
 
 services.AddBrokerClient(options => 
 {
-    options.Address = "http://localhost:5000";
+    options.Address = "http://localhost:5113";
     options.ClientName = "Test";
 });
 
@@ -35,6 +35,7 @@ var subscriberTask = Task.Run(async () =>
         await foreach (var message in messages)
         {
             Console.WriteLine($"[Sub] Успех! Брокер вернул сообщение. ID: {message.Message.Id}");
+            await subscriber.AckAsync(message.Message.Id, "very-unique-id", ct: cts.Token);
         }
         Console.WriteLine($"[Sub] Брокер закончил отправлять сообщения");
     }

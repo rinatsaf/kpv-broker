@@ -4,8 +4,8 @@ using Broker.Contracts;
 
 namespace Engine.MessageStorage.Components;
 
-internal class MessageWriter(string rootPath, JsonSerializerOptions jsonOptions, ConcurrentDictionary<string, SemaphoreSlim> queueLocks)
-    : BaseComponent(rootPath, jsonOptions, queueLocks)
+internal class MessageWriter(string rootPath, JsonSerializerOptions jsonOptions, ConcurrentDictionary<string, SemaphoreSlim> queueLocks, ILogger<MessageWriter> logger)
+    : BaseComponent(rootPath, jsonOptions, queueLocks, logger)
 {
     public async Task<bool> StoreSingle(Message message, string targetQueue, CancellationToken ct)
     {
@@ -25,7 +25,7 @@ internal class MessageWriter(string rootPath, JsonSerializerOptions jsonOptions,
             written = true;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-        catch (Exception) { return false; }
+        catch (Exception ex) { _logger.LogError(ex, "Failed to store message to queue {Queue}", targetQueue); return false; }
         finally { semaphore.Release(); }
 
         if (written)
@@ -56,7 +56,7 @@ internal class MessageWriter(string rootPath, JsonSerializerOptions jsonOptions,
             written = true;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-        catch (Exception) { return false; }
+        catch (Exception ex) { _logger.LogError(ex, "Failed to store {Count} messages to queue {Queue}", messagesList.Count, targetQueue); return false; }
         finally { semaphore.Release(); }
 
         if (written)

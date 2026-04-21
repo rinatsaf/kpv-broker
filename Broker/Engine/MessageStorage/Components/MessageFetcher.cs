@@ -4,8 +4,8 @@ using Broker.Contracts;
 
 namespace Engine.MessageStorage.Components;
 
-internal class MessageFetcher(string rootPath, JsonSerializerOptions jsonOptions, ConcurrentDictionary<string, SemaphoreSlim> queueLocks)
-    : BaseComponent(rootPath, jsonOptions, queueLocks)
+internal class MessageFetcher(string rootPath, JsonSerializerOptions jsonOptions, ConcurrentDictionary<string, SemaphoreSlim> queueLocks, ILogger<MessageFetcher> logger)
+    : BaseComponent(rootPath, jsonOptions, queueLocks, logger)
 {
     public async Task<IReadOnlyList<Message>> FetchAsync(
         string queueName,

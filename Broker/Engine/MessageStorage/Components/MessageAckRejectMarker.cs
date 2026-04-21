@@ -4,8 +4,8 @@ using Broker.Contracts;
 
 namespace Engine.MessageStorage.Components;
 
-internal class MessageAckRejectMarker(string rootPath, JsonSerializerOptions jsonOptions, ConcurrentDictionary<string, SemaphoreSlim> queueLocks)
-    : BaseComponent(rootPath, jsonOptions, queueLocks)
+internal class MessageAckRejectMarker(string rootPath, JsonSerializerOptions jsonOptions, ConcurrentDictionary<string, SemaphoreSlim> queueLocks, ILogger<MessageAckRejectMarker> logger)
+    : BaseComponent(rootPath, jsonOptions, queueLocks, logger)
 {
     public async Task<bool> TryAcknowledgeAsync(
         AcknowledgeRequest request,
