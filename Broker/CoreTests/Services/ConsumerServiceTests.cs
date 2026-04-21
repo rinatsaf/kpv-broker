@@ -1,7 +1,5 @@
 ﻿using Broker.Contracts;
 using Core.Abstractions;
-using Moq;
-using Assert = Xunit.Assert;
 using ConsumerService = Core.Services.ConsumerService;
 
 namespace Core.Tests.Services;
