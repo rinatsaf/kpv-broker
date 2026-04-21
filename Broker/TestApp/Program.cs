@@ -7,7 +7,11 @@ AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport
 
 var services = new ServiceCollection();
 
-services.AddBrokerClient("http://localhost:5113");
+services.AddBrokerClient(options => 
+{
+    options.Address = "http://localhost:5000";
+    options.ClientName = "Test";
+});
 
 var serviceProvider = services.BuildServiceProvider();
 
