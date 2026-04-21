@@ -152,6 +152,11 @@ internal class QueueManager(string rootPath, JsonSerializerOptions jsonOptions, 
         }
 
         var messagesFile = GetQueueComponentPath(queueName, "messages.jsonl");
+        if (!File.Exists(messagesFile))
+        {
+            return new QueueStats();
+        }
+
         var lines = await File.ReadAllLinesAsync(messagesFile, ct);
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
@@ -161,7 +166,16 @@ internal class QueueManager(string rootPath, JsonSerializerOptions jsonOptions, 
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
 
-            var stored = JsonSerializer.Deserialize<StoredMessage>(line, _jsonOptions);
+            StoredMessage? stored;
+            try
+            {
+                stored = JsonSerializer.Deserialize<StoredMessage>(line, _jsonOptions);
+            }
+            catch (JsonException)
+            {
+                continue;
+            }
+
             if (stored == null) continue;
 
             total++;
