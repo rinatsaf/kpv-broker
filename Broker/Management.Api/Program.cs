@@ -6,7 +6,8 @@ using Microsoft.AspNetCore.Mvc;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddRazorComponents();
+builder.Services.AddRazorComponents()
+    .AddInteractiveServerComponents();
 builder.Services.AddSingleton<IBrokerConnection>(new BrokerConnection("http://localhost:5113"));
 builder.Services.AddSingleton<MonitoringClient>();
 builder.Services.AddSingleton<QueueClient>();
@@ -18,12 +19,13 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseAntiforgery();
 
-app.MapRazorComponents<Management.Api.Components.App>();
+app.MapRazorComponents<Management.Api.Components.App>()
+    .AddInteractiveServerRenderMode();
 
 app.MapGet("/api/metrics/{queueName}",  async (MonitoringClient client, string queueName) =>
 {
     var ctx = new CancellationTokenSource();
-    var m = await client.GetMetricsAsync(queueName, 0, long.MaxValue,  ctx.Token);
+    var m = await client.GetMetricsAsync(queueName, 0, long.MaxValue, ctx.Token);
     return Results.Ok(m);
 });
 
@@ -48,7 +50,7 @@ app.MapGet("/api/config",  async ([FromServices] ConfigClient client) =>
     return Results.Ok(m);
 });
 
-app.MapPost("/api/queues",  async ([FromServices] QueueClient client, CreateQueueRequest request) =>
+app.MapPost("/api/queues",  async ([FromServices] QueueClient client, [FromBody] CreateQueueRequest request) =>
 {
     var ctx = new CancellationTokenSource();
     var m = await client.CreateQueue(request, ctx.Token);
@@ -76,7 +78,7 @@ app.MapPost("/api/queues/{name}/purge",  async ([FromServices] QueueClient clien
     return Results.Ok(m);
 });
 
-app.MapPut("/api/config",  async ([FromServices] ConfigClient client, UpdateConfigRequest request) =>
+app.MapPut("/api/config",  async ([FromServices] ConfigClient client, [FromBody] UpdateConfigRequest request) =>
 {
     var ctx = new CancellationTokenSource();
     var m = await client.UpdateConfigAsync(request, ctx.Token);

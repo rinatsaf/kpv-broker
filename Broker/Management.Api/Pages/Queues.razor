@@ -2,19 +2,60 @@
 @using Broker.Contracts
 @using Management.Api.MonitoringClient
 @inject QueueClient QueueClient
+@rendermode RenderMode.InteractiveServer
 
 <h3>Queue Management</h3>
 
 @if (!string.IsNullOrEmpty(_message))
 {
-    <div class="alert @(_messageType == "success" ? "alert-success" : "alert-danger") alert-dismissible fade show" role="alert">
+    <div class="alert @(_messageType == "success" ? "alert-success" : "alert-danger")">
         @_message
         <button type="button" class="btn-close" @onclick="() => _message = string.Empty"></button>
     </div>
 }
 
+@if (_showCreate)
+{
+    <EditForm Model="_newQueue" OnValidSubmit="CreateQueue">
+    <div class="card mb-3">
+        <div class="card-header">Create Queue</div>
+        <div class="card-body">
+            <div class="mb-3">
+                <label class="form-label">Name</label>
+                <InputText class="form-control" @bind-Value="_newQueue.Name" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Max Size</label>
+                <InputNumber class="form-control" @bind-Value="_newQueue.MaxSize" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Message TTL (seconds)</label>
+                <InputNumber class="form-control" @bind-Value="_newQueue.MessageTtlSeconds" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Max Delivery Attempts</label>
+                <InputNumber class="form-control" @bind-Value="_newQueue.MaxDeliveryAttempts" />
+            </div>
+            <div class="mb-3 form-check">
+                <InputCheckbox class="form-check-input" @bind-Value="_newQueue.DeadLetterEnabled" />
+                <label class="form-check-label">Enable Dead Letter Queue</label>
+            </div>
+            @if (_newQueue.DeadLetterEnabled)
+            {
+                <div class="mb-3">
+                    <label class="form-label">Dead Letter Queue Name</label>
+                    <InputText class="form-control" @bind-Value="_newQueue.DeadLetterQueue" />
+                </div>
+            }
+            <button type="submit" class="btn btn-primary">Create</button>
+            <button type="button" class="btn btn-secondary ms-2" @onclick="() => _showCreate = false">Cancel</button>
+        </div>
+    </div>
+</EditForm>
+}
+
 <div class="mb-3">
-    <button class="btn btn-primary" @onclick="ShowCreateModal">Create Queue</button>
+    <button class="btn btn-primary" @onclick="() => _showCreate = !_showCreate">@(_showCreate ? "Hide Form" : "Create Queue")</button>
     <button class="btn btn-outline-secondary ms-2" @onclick="async () => await LoadQueues()">Refresh</button>
 </div>
 
@@ -37,13 +78,13 @@ else
             @foreach (var queue in _queues)
             {
                 <tr>
-                    <td><a href="#" @onclick="() => ViewQueue(queue.Name)">@queue.Name</a></td>
+                    <td>@queue.Name</td>
                     <td>@queue.MessageCount</td>
                     <td>@(queue.IsDeadLetterQueue ? "Yes" : "No")</td>
                     <td>
                         <button class="btn btn-sm btn-info" @onclick="() => ViewQueue(queue.Name)">View</button>
-                        <button class="btn btn-sm btn-warning" @onclick='() => ConfirmAction("purge", queue.Name)'>Purge</button>
-                        <button class="btn btn-sm btn-danger" @onclick='() => ConfirmAction("delete", queue.Name)'>Delete</button>
+                        <button class="btn btn-sm btn-warning" @onclick="() => PurgeClick(queue.Name)">Purge</button>
+                        <button class="btn btn-sm btn-danger" @onclick="() => DeleteClick(queue.Name)">Delete</button>
                     </td>
                 </tr>
             }
@@ -70,96 +111,40 @@ else
                 <p>Acknowledged: @_queueStats.AcknowledgedTotal</p>
                 <p>Rejected: @_queueStats.RejectedTotal</p>
                 <p>Expired: @_queueStats.ExpiredTotal</p>
-                <p>Avg Processing Time: @_queueStats.AvgProcessingTimeMs ms</p>
             }
         </div>
     </div>
 }
 
-@if (_showCreate)
-{
-    <div class="modal fade show d-block" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Create Queue</h5>
-                    <button type="button" class="btn-close" @onclick="() => _showCreate = false"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">Name</label>
-                        <input class="form-control" @bind="_newQueue.Name" />
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Max Size</label>
-                        <input class="form-control" type="number" @bind="_newQueue.MaxSize" />
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Message TTL (seconds)</label>
-                        <input class="form-control" type="number" @bind="_newQueue.MessageTtlSeconds" />
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Max Delivery Attempts</label>
-                        <input class="form-control" type="number" @bind="_newQueue.MaxDeliveryAttempts" />
-                    </div>
-                    <div class="mb-3 form-check">
-                        <input class="form-check-input" type="checkbox" @bind="_newQueue.DeadLetterEnabled" />
-                        <label class="form-check-label">Enable Dead Letter Queue</label>
-                    </div>
-                    @if (_newQueue.DeadLetterEnabled)
-                    {
-                        <div class="mb-3">
-                            <label class="form-label">Dead Letter Queue Name</label>
-                            <input class="form-control" @bind="_newQueue.DeadLetterQueue" />
-                        </div>
-                    }
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn-secondary" @onclick="() => _showCreate = false">Cancel</button>
-                    <button class="btn btn-primary" @onclick="CreateQueue">Create</button>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="modal-backdrop fade show"></div>
-}
-
 @if (_showConfirm)
 {
-    <div class="modal fade show d-block" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Confirm @_confirmAction</h5>
-                    <button type="button" class="btn-close" @onclick="() => _showConfirm = false"></button>
-                </div>
-                <div class="modal-body">
-                    <p>Are you sure you want to @_confirmAction queue "@_confirmQueueName"?</p>
-                    @if (_confirmAction == "purge")
-                    {
-                        <p class="text-warning">This will remove all messages from the queue.</p>
-                    }
-                    @if (_confirmAction == "delete")
-                    {
-                        <p class="text-danger">This action cannot be undone.</p>
-                    }
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn-secondary" @onclick="() => _showConfirm = false">Cancel</button>
-                    <button class="btn @(_confirmAction == "delete" ? "btn-danger" : "btn-warning")" @onclick="ExecuteConfirmedAction">Confirm</button>
-                </div>
+    <div style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000;">
+        <div style="width:400px; margin:100px auto; background:white; padding:20px; border-radius:5px;">
+            <h5>Confirm @_confirmAction</h5>
+            <hr />
+            <p>Are you sure you want to @_confirmAction queue "@_confirmQueueName"?</p>
+            @if (_confirmAction == "purge")
+            {
+                <p style="color:orange;">This will remove all messages from the queue.</p>
+            }
+            @if (_confirmAction == "delete")
+            {
+                <p style="color:red;">This action cannot be undone.</p>
+            }
+            <div>
+                <button class="btn btn-secondary me-2" @onclick="() => _showConfirm = false">Cancel</button>
+                <button class="btn @(_confirmAction == "delete" ? "btn-danger" : "btn-warning")" @onclick="async () => await ExecuteConfirmedAction()">Confirm</button>
             </div>
         </div>
     </div>
-    <div class="modal-backdrop fade show"></div>
 }
 
 @code {
     private List<QueueInfo>? _queues;
     private GetQueueInfoResponse? _selectedQueue;
     private QueueStats? _queueStats;
-    private bool _showCreate;
-    private bool _showConfirm;
+    private bool _showCreate = false;
+    private bool _showConfirm = false;
     private string _confirmAction = "";
     private string _confirmQueueName = "";
     private CreateQueueRequest _newQueue = new();
@@ -200,9 +185,16 @@ else
         }
     }
 
-    private void ConfirmAction(string action, string queueName)
+    private void PurgeClick(string queueName)
     {
-        _confirmAction = action;
+        _confirmAction = "purge";
+        _confirmQueueName = queueName;
+        _showConfirm = true;
+    }
+
+    private void DeleteClick(string queueName)
+    {
+        _confirmAction = "delete";
         _confirmQueueName = queueName;
         _showConfirm = true;
     }
@@ -266,12 +258,6 @@ else
         {
             ShowMessage($"Error purging queue: {ex.Message}", "error");
         }
-    }
-
-    private void ShowCreateModal()
-    {
-        _newQueue = new CreateQueueRequest();
-        _showCreate = true;
     }
 
     private async Task CreateQueue()
