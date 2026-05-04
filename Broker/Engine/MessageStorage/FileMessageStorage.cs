@@ -140,7 +140,7 @@ public sealed class FileMessageStorage : IMessageStorage
         return queueManager.DeleteQueueAsync(request.Name, ct);
     }
 
-    public Task<QueueInfo> GetQueueInfoAsync(GetQueueInfoRequest request, CancellationToken ct = default)
+    public Task<QueueInfo?> GetQueueInfoAsync(GetQueueInfoRequest request, CancellationToken ct = default)
     {
         ThrowIfDisposed();
         return queueManager.GetQueueInfoAsync(request.Name, ct);
@@ -177,7 +177,7 @@ public sealed class FileMessageStorage : IMessageStorage
 
     // ==================== МЕТРИКИ И МОНИТОРИНГ ====================
 
-    public Task<QueueStats> GetStatsAsync(string queueName, CancellationToken ct = default)
+    public Task<QueueStats?> GetStatsAsync(string queueName, CancellationToken ct = default)
     {
         ThrowIfDisposed();
         return queueManager.GetStatsAsync(queueName, ct);

@@ -28,17 +28,21 @@ public class QueueManagementService(IMessageStorage messageStorage) : IQueueMana
     public async Task<GetQueueInfoResponse> GetQueueInfoAsync(GetQueueInfoRequest request, CancellationToken ct = default)
     {
         var info = await messageStorage.GetQueueInfoAsync(request, ct);
-        var dlq = await messageStorage.FetchFromDeadLetterAsync(info.Name,Int32.MaxValue, ct);
+        if (info == null)
+            return new GetQueueInfoResponse { QueueFound = false };
+        var dlq = await messageStorage.FetchFromDeadLetterAsync(info.Name, int.MaxValue, ct);
         var stats = await messageStorage.GetStatsAsync(info.Name, ct);
         
         return new GetQueueInfoResponse
         {
+            QueueFound = true,
             Name = info.Name,
             MessageCount = info.MessageCount,
             DeadLetterCount = dlq.Count,
             Stats = stats
         };
     }
+
     public async Task<ListQueuesResponse> ListQueuesAsync(ListQueuesRequest request, CancellationToken ct = default)
     {
         return await messageStorage.ListQueuesAsync(request, ct);
@@ -52,14 +56,20 @@ public class QueueManagementService(IMessageStorage messageStorage) : IQueueMana
         };
         
         var infoBeforePurge = await messageStorage.GetQueueInfoAsync(req, ct);
+        if (infoBeforePurge == null)
+            return new PurgeQueueResponse { QueueFound = false };
+
         var resp =  await messageStorage.PurgeQueueAsync(request, ct);
         
         if (resp)
         {
             var infoAfterPurge = await messageStorage.GetQueueInfoAsync(req, ct);
+            if (infoAfterPurge == null)
+                return new PurgeQueueResponse { QueueFound = false };
             return new PurgeQueueResponse
             {
-               MessagesRemoved = infoBeforePurge.MessageCount - infoAfterPurge.MessageCount
+                QueueFound = true,
+                MessagesRemoved = infoBeforePurge.MessageCount - infoAfterPurge.MessageCount
             };
         }
         return new PurgeQueueResponse

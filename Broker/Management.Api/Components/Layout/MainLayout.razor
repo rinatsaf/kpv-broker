@@ -1,0 +1,20 @@
+@inherits LayoutComponentBase
+
+<div class="page">
+    <div class="sidebar">
+        <nav class="navbar navbar-dark bg-dark">
+            <div class="container-fluid">
+                <a class="navbar-brand" href="/">Broker Management</a>
+            </div>
+            <div class="nav-scrollable">
+                <NavMenu />
+            </div>
+        </nav>
+    </div>
+
+    <main>
+        <div class="content px-4">
+            @Body
+        </div>
+    </main>
+</div>

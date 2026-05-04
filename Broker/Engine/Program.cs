@@ -14,6 +14,7 @@ builder.Services.AddSingleton<IPublisherService, PublisherService>();
 builder.Services.AddSingleton<IConsumerService, ConsumerService>();
 builder.Services.AddSingleton<IQueueManagementService, QueueManagementService>();
 builder.Services.AddSingleton<IMonitoringService, MonitoringService>();
+builder.Services.AddSingleton<IConfigService, ConfigService>();
 
 builder.Services.AddHostedService<StorageMaintenanceService>();
 
@@ -23,5 +24,6 @@ app.MapGrpcService<PublisherGrpcEndpoint>();
 app.MapGrpcService<ConsumerGrpcEndpoint>();
 app.MapGrpcService<QueueGrpcEndpoint>();
 app.MapGrpcService<MonitoringGrpcEndpoint>();
+app.MapGrpcService<ConfigGrpcEndpoint>();
 
 app.Run();

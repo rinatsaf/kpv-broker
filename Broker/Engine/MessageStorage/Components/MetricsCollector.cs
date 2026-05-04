@@ -22,6 +22,8 @@ internal class MetricsCollector(string rootPath, JsonSerializerOptions jsonOptio
         {
             var queueName = Path.GetFileName(queueDir);
             var stats = await _queueManager.GetStatsAsync(queueName!, ct);
+            if (stats == null)
+                continue;
 
             totalQueues++;
             totalMessages += stats.PublishedTotal;

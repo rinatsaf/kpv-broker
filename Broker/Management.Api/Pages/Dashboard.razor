@@ -1,0 +1,64 @@
+@page "/"
+@using Broker.Contracts
+@using global::Api.MonitoringClient
+@inject MonitoringClient MonitoringClient
+
+<h3>Broker Dashboard</h3>
+
+@if (_status == null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <div class="row">
+        <div class="col-md-3">
+            <div class="card text-white bg-@(_status.IsHealthy ? "success" : "danger") mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Status</h5>
+                    <p class="card-text">@(_status.IsHealthy ? "Healthy" : "Unhealthy")</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-primary mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Queues</h5>
+                    <p class="card-text">@_status.TotalQueues</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-info mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Messages</h5>
+                    <p class="card-text">@_status.TotalMessages</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-warning mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Connections</h5>
+                    <p class="card-text">@_status.ActiveConnections</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-4">
+        <h4>Broker Info</h4>
+        <p><strong>Version:</strong> @_status.Version</p>
+        <p><strong>Uptime:</strong> @TimeSpan.FromSeconds(_status.UptimeSeconds).ToString(@"dd\.hh\:mm\:ss")</p>
+    </div>
+}
+
+@code {
+    private BrokerStatus? _status;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var cts = new CancellationTokenSource();
+        _status = await MonitoringClient.GetBrokerStatus(cts.Token);
+    }
+}
