@@ -1,10 +1,17 @@
-@page "/"
+@page "/dashboard"
 @using Broker.Contracts
 @using global::Api.MonitoringClient
 @inject MonitoringClient MonitoringClient
 @rendermode RenderMode.InteractiveServer
 
 <h3>Broker Dashboard</h3>
+
+@if (!string.IsNullOrEmpty(_error))
+{
+    <div class="alert alert-danger">
+        @_error
+    </div>
+}
 
 @if (_status == null)
 {
@@ -14,7 +21,7 @@ else
 {
     <div class="row">
         <div class="col-md-3">
-            <div class="card text-white bg-@(_status.IsHealthy ? "success" : "danger") mb-3">
+            <div class="card @(_status.IsHealthy ? "bg-success" : "bg-danger") text-white mb-3">
                 <div class="card-body">
                     <h5 class="card-title">Status</h5>
                     <p class="card-text">@(_status.IsHealthy ? "Healthy" : "Unhealthy")</p>
@@ -22,7 +29,7 @@ else
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card text-white bg-primary mb-3">
+            <div class="card bg-primary text-white mb-3">
                 <div class="card-body">
                     <h5 class="card-title">Queues</h5>
                     <p class="card-text">@_status.TotalQueues</p>
@@ -30,7 +37,7 @@ else
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card text-white bg-info mb-3">
+            <div class="card bg-info text-white mb-3">
                 <div class="card-body">
                     <h5 class="card-title">Messages</h5>
                     <p class="card-text">@_status.TotalMessages</p>
@@ -38,7 +45,7 @@ else
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card text-white bg-warning mb-3">
+            <div class="card bg-warning text-white mb-3">
                 <div class="card-body">
                     <h5 class="card-title">Connections</h5>
                     <p class="card-text">@_status.ActiveConnections</p>
@@ -56,10 +63,18 @@ else
 
 @code {
     private BrokerStatus? _status;
+    private string _error = "";
 
     protected override async Task OnInitializedAsync()
     {
-        var cts = new CancellationTokenSource();
-        _status = await MonitoringClient.GetBrokerStatus(cts.Token);
+        try
+        {
+            var cts = new CancellationTokenSource();
+            _status = await MonitoringClient.GetBrokerStatus(cts.Token);
+        }
+        catch (Exception ex)
+        {
+            _error = $"Error loading dashboard: {ex.Message}";
+        }
     }
 }

@@ -22,6 +22,8 @@ app.UseAntiforgery();
 app.MapRazorComponents<Management.Api.Components.App>()
     .AddInteractiveServerRenderMode();
 
+app.MapGet("/", () => Results.Redirect("/dashboard"));
+
 app.MapGet("/api/metrics/{queueName}",  async (MonitoringClient client, string queueName) =>
 {
     var ctx = new CancellationTokenSource();

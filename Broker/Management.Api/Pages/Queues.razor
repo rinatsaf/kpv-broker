@@ -17,45 +17,47 @@
 @if (_showCreate)
 {
     <EditForm Model="_newQueue" OnValidSubmit="CreateQueue">
-    <div class="card mb-3">
-        <div class="card-header">Create Queue</div>
-        <div class="card-body">
-            <div class="mb-3">
-                <label class="form-label">Name</label>
-                <InputText class="form-control" @bind-Value="_newQueue.Name" />
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Max Size</label>
-                <InputNumber class="form-control" @bind-Value="_newQueue.MaxSize" />
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Message TTL (seconds)</label>
-                <InputNumber class="form-control" @bind-Value="_newQueue.MessageTtlSeconds" />
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Max Delivery Attempts</label>
-                <InputNumber class="form-control" @bind-Value="_newQueue.MaxDeliveryAttempts" />
-            </div>
-            <div class="mb-3 form-check">
-                <InputCheckbox class="form-check-input" @bind-Value="_newQueue.DeadLetterEnabled" />
-                <label class="form-check-label">Enable Dead Letter Queue</label>
-            </div>
-            @if (_newQueue.DeadLetterEnabled)
-            {
+        <div class="card mb-3">
+            <div class="card-header">Create Queue</div>
+            <div class="card-body">
                 <div class="mb-3">
-                    <label class="form-label">Dead Letter Queue Name</label>
-                    <InputText class="form-control" @bind-Value="_newQueue.DeadLetterQueue" />
+                    <label class="form-label">Name</label>
+                    <InputText class="form-control" @bind-Value="_newQueue.Name" />
                 </div>
-            }
-            <button type="submit" class="btn btn-primary">Create</button>
-            <button type="button" class="btn btn-secondary ms-2" @onclick="() => _showCreate = false">Cancel</button>
+                <div class="mb-3">
+                    <label class="form-label">Max Size</label>
+                    <InputNumber class="form-control" @bind-Value="_newQueue.MaxSize" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Message TTL (seconds)</label>
+                    <InputNumber class="form-control" @bind-Value="_newQueue.MessageTtlSeconds" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Max Delivery Attempts</label>
+                    <InputNumber class="form-control" @bind-Value="_newQueue.MaxDeliveryAttempts" />
+                </div>
+                <div class="mb-3 form-check">
+                    <InputCheckbox class="form-check-input" @bind-Value="_newQueue.DeadLetterEnabled" />
+                    <label class="form-check-label">Enable Dead Letter Queue</label>
+                </div>
+                @if (_newQueue.DeadLetterEnabled)
+                {
+                    <div class="mb-3">
+                        <label class="form-label">Dead Letter Queue Name</label>
+                        <InputText class="form-control" @bind-Value="_newQueue.DeadLetterQueue" />
+                    </div>
+                }
+                <button type="submit" class="btn btn-primary">Create</button>
+                <button type="button" class="btn btn-secondary ms-2" @onclick="() => _showCreate = false">Cancel</button>
+            </div>
         </div>
-    </div>
-</EditForm>
+    </EditForm>
 }
 
 <div class="mb-3">
-    <button class="btn btn-primary" @onclick="() => _showCreate = !_showCreate">@(_showCreate ? "Hide Form" : "Create Queue")</button>
+    <button type="button" class="btn btn-primary" @onclick="() => _showCreate = !_showCreate">
+        @(_showCreate ? "Hide Form" : "Create Queue")
+    </button>
     <button class="btn btn-outline-secondary ms-2" @onclick="async () => await LoadQueues()">Refresh</button>
 </div>
 
@@ -133,7 +135,8 @@ else
             }
             <div>
                 <button class="btn btn-secondary me-2" @onclick="() => _showConfirm = false">Cancel</button>
-                <button class="btn @(_confirmAction == "delete" ? "btn-danger" : "btn-warning")" @onclick="async () => await ExecuteConfirmedAction()">Confirm</button>
+                <button class="btn @(_confirmAction == "delete" ? "btn-danger" : "btn-warning")"
+                        @onclick="async () => await ExecuteConfirmedAction()">Confirm</button>
             </div>
         </div>
     </div>
