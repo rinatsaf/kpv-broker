@@ -7,12 +7,15 @@ namespace Core.Tests.Services;
 public class PublisherServiceTests
 {
     private readonly Mock<IMessageStorage> _storageMock;
+    private readonly Mock<IExchangeRouter> _routerMock;
     private readonly PublisherService _service;
 
     public PublisherServiceTests()
     {
         _storageMock = new Mock<IMessageStorage>();
-        _service = new PublisherService(_storageMock.Object);
+        _routerMock = new Mock<IExchangeRouter>();
+        _service = new PublisherService(_storageMock.Object,  _routerMock.Object);
+        
     }
 
     [Fact]
