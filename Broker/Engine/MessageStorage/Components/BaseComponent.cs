@@ -3,11 +3,12 @@ using System.Text.Json;
 
 namespace Engine.MessageStorage.Components;
 
-internal class BaseComponent(string rootPath, JsonSerializerOptions jsonOptions, ConcurrentDictionary<string, SemaphoreSlim> queueLocks)
+internal class BaseComponent(string rootPath, JsonSerializerOptions jsonOptions, ConcurrentDictionary<string, SemaphoreSlim> queueLocks, ILogger logger)
 {
     protected readonly string _rootPath = rootPath;
     protected readonly JsonSerializerOptions _jsonOptions = jsonOptions;
     protected readonly ConcurrentDictionary<string, SemaphoreSlim> _queueLocks = queueLocks;
+    protected readonly ILogger _logger = logger;
 
     // =============== Queue path common operations ========== 
 

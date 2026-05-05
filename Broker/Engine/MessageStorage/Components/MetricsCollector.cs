@@ -4,8 +4,8 @@ using Broker.Contracts;
 
 namespace Engine.MessageStorage.Components;
 
-internal class MetricsCollector(string rootPath, JsonSerializerOptions jsonOptions, ConcurrentDictionary<string, SemaphoreSlim> queueLocks, QueueManager queueManager)
-    : BaseComponent(rootPath, jsonOptions, queueLocks)
+internal class MetricsCollector(string rootPath, JsonSerializerOptions jsonOptions, ConcurrentDictionary<string, SemaphoreSlim> queueLocks, QueueManager queueManager, ILogger<MetricsCollector> logger)
+    : BaseComponent(rootPath, jsonOptions, queueLocks, logger)
 {
     private readonly QueueManager _queueManager = queueManager;
     

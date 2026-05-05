@@ -8,7 +8,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddGrpc();
 
 var storagePath = Path.Combine(builder.Environment.ContentRootPath, "data");
-builder.Services.AddSingleton<IMessageStorage>(_ => new FileMessageStorage(storagePath));
+builder.Services.Configure<FileMessageStorageOptions>(opts => opts.RootPath = storagePath);
+builder.Services.AddSingleton<IMessageStorage, FileMessageStorage>();
 
 builder.Services.AddSingleton<IPublisherService, PublisherService>();
 builder.Services.AddSingleton<IConsumerService, ConsumerService>();
