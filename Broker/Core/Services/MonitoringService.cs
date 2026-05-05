@@ -19,6 +19,15 @@ public sealed class MonitoringService(IMessageStorage messageStorage) : IMonitor
         }
 
         var stats = await messageStorage.GetStatsAsync(request.QueueName, ct);
+
+        if (stats == null)
+        {
+            return new GetMetricsResponse
+            {
+                Metrics = {}
+            };
+        }
+
         var metrics = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
         {
             [$"queue.{request.QueueName}.published"] = stats.PublishedTotal,

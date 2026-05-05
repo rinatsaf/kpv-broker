@@ -58,18 +58,21 @@ internal class QueueManager(string rootPath, JsonSerializerOptions jsonOptions, 
         catch (Exception ex) { _logger.LogError(ex, "Failed to delete queue {Queue}", name); return false; }
     }
 
-    public async Task<QueueInfo> GetQueueInfoAsync(string name, CancellationToken ct = default)
+    public async Task<QueueInfo?> GetQueueInfoAsync(string name, CancellationToken ct = default)
     {
         var queuePath = GetQueuePath(name);
         var metadataFile = Path.Combine(queuePath, "metadata.json");
 
         if (!File.Exists(metadataFile))
-            throw new InvalidOperationException($"Queue '{name}' not found");
+            return null;
 
         var metadata = JsonSerializer.Deserialize<QueueMetadata>(
             await File.ReadAllTextAsync(metadataFile, ct), _jsonOptions);
 
         var stats = await GetStatsAsync(name, ct);
+
+        if (stats == null)
+            return null;
 
         return new QueueInfo
         {
@@ -93,8 +96,11 @@ internal class QueueManager(string rootPath, JsonSerializerOptions jsonOptions, 
         var queues = new List<QueueInfo>();
         foreach (var name in allQueues)
         {
-            if (name == null) continue;
+            if (name == null)
+                continue;
             var stats = await GetStatsAsync(name, ct);
+            if (stats == null)
+                continue;
             var meta = await LoadQueueMetadataAsync(name, ct);
 
             queues.Add(new QueueInfo
@@ -134,7 +140,7 @@ internal class QueueManager(string rootPath, JsonSerializerOptions jsonOptions, 
         finally { semaphore.Release(); }
     }
 
-    public async Task<QueueStats> GetStatsAsync(string queueName, CancellationToken ct = default)
+    public async Task<QueueStats?> GetStatsAsync(string queueName, CancellationToken ct = default)
     {
         var metadata = await LoadQueueMetadataAsync(queueName, ct);
 
@@ -154,7 +160,7 @@ internal class QueueManager(string rootPath, JsonSerializerOptions jsonOptions, 
         var messagesFile = GetQueueComponentPath(queueName, "messages.jsonl");
         if (!File.Exists(messagesFile))
         {
-            return new QueueStats();
+            return null;
         }
 
         var lines = await File.ReadAllLinesAsync(messagesFile, ct);

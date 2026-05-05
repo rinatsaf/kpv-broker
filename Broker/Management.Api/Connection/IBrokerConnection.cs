@@ -6,4 +6,5 @@ public interface IBrokerConnection : IDisposable
 {
     MonitoringService.MonitoringServiceClient GetMonitoringClient();
     ConfigService.ConfigServiceClient GetConfigClient();
+    QueueService.QueueServiceClient GetQueueClient();
 }

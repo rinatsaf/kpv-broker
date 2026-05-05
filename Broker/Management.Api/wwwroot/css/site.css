@@ -1,0 +1,37 @@
+@import url('bootstrap.min.css');
+
+.page {
+    display: flex;
+    flex-direction: row;
+    height: 100vh;
+}
+
+.sidebar {
+    width: 250px;
+    background-color: #343a40;
+    color: white;
+    min-height: 100vh;
+}
+
+.sidebar .navbar {
+    padding: 1rem;
+}
+
+.sidebar .nav-link {
+    color: rgba(255, 255, 255, 0.75);
+    padding: 0.5rem 1rem;
+    text-decoration: none;
+}
+
+.sidebar .nav-link:hover,
+.sidebar .nav-link.active {
+    color: white;
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+main {
+    flex: 1;
+    padding: 1rem;
+    overflow-y: auto;
+    background-color: #f8f9fa;
+}

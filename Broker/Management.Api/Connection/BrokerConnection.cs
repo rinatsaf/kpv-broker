@@ -9,6 +9,9 @@ public sealed class BrokerConnection(string address) : IBrokerConnection
 
     public MonitoringService.MonitoringServiceClient GetMonitoringClient() =>
         new(_channel);
+    
+    public QueueService.QueueServiceClient GetQueueClient() =>
+        new(_channel);
         
     public ConfigService.ConfigServiceClient GetConfigClient() => 
         new(_channel);

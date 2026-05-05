@@ -1,0 +1,101 @@
+@page "/config"
+@using Broker.Contracts
+@using Management.Api.MonitoringClient
+@inject ConfigClient ConfigClient
+@rendermode RenderMode.InteractiveServer
+
+<h3>Broker Configuration</h3>
+
+@if (!string.IsNullOrEmpty(_message))
+{
+    <div class="alert @(_messageType == "success" ? "alert-success" : "alert-danger") alert-dismissible fade show" role="alert">
+        @_message
+        <button type="button" class="btn-close" @onclick="() => _message = string.Empty"></button>
+    </div>
+}
+
+@if (_config == null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <div class="card">
+        <div class="card-body">
+            <div class="mb-3">
+                <label class="form-label">Max Message Size (bytes)</label>
+                <input class="form-control" type="number" @bind="_config.MaxMessageSizeBytes" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Default Message TTL (seconds)</label>
+                <input class="form-control" type="number" @bind="_config.DefaultMessageTtlSeconds" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Default Max Delivery Attempts</label>
+                <input class="form-control" type="number" @bind="_config.DefaultMaxDeliveryAttempts" />
+            </div>
+            <div class="mb-3 form-check">
+                <input class="form-check-input" type="checkbox" @bind="_config.DeadLetterEnabled" />
+                <label class="form-check-label">Dead Letter Enabled</label>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Consumer Timeout (seconds)</label>
+                <input class="form-control" type="number" @bind="_config.ConsumerTimeoutSeconds" />
+            </div>
+            <button class="btn btn-primary" @onclick="UpdateConfig">Update Configuration</button>
+            <button class="btn btn-outline-secondary ms-2" @onclick="async () => await LoadConfig()">Reset</button>
+        </div>
+    </div>
+}
+
+@code {
+    private BrokerConfig? _config;
+    private string _message = "";
+    private string _messageType = "success";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConfig();
+    }
+
+    private async Task LoadConfig()
+    {
+        try
+        {
+            var cts = new CancellationTokenSource();
+            _config = await ConfigClient.GetConfigAsync(cts.Token);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Error loading config: {ex.Message}", "error");
+        }
+    }
+
+    private async Task UpdateConfig()
+    {
+        if (_config == null) return;
+        try
+        {
+            var cts = new CancellationTokenSource();
+            var response = await ConfigClient.UpdateConfigAsync(new UpdateConfigRequest { Config = _config }, cts.Token);
+            if (response.Success)
+            {
+                ShowMessage("Configuration updated successfully.", "success");
+            }
+            else
+            {
+                ShowMessage("Failed to update configuration.", "error");
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Error updating config: {ex.Message}", "error");
+        }
+    }
+
+    private void ShowMessage(string message, string type)
+    {
+        _message = message;
+        _messageType = type;
+    }
+}

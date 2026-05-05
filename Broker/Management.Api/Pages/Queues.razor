@@ -1,0 +1,294 @@
+@page "/queues"
+@using Broker.Contracts
+@using Management.Api.MonitoringClient
+@inject QueueClient QueueClient
+@rendermode RenderMode.InteractiveServer
+
+<h3>Queue Management</h3>
+
+@if (!string.IsNullOrEmpty(_message))
+{
+    <div class="alert @(_messageType == "success" ? "alert-success" : "alert-danger")">
+        @_message
+        <button type="button" class="btn-close" @onclick="() => _message = string.Empty"></button>
+    </div>
+}
+
+@if (_showCreate)
+{
+    <EditForm Model="_newQueue" OnValidSubmit="CreateQueue">
+        <div class="card mb-3">
+            <div class="card-header">Create Queue</div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Name</label>
+                    <InputText class="form-control" @bind-Value="_newQueue.Name" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Max Size</label>
+                    <InputNumber class="form-control" @bind-Value="_newQueue.MaxSize" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Message TTL (seconds)</label>
+                    <InputNumber class="form-control" @bind-Value="_newQueue.MessageTtlSeconds" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Max Delivery Attempts</label>
+                    <InputNumber class="form-control" @bind-Value="_newQueue.MaxDeliveryAttempts" />
+                </div>
+                <div class="mb-3 form-check">
+                    <InputCheckbox class="form-check-input" @bind-Value="_newQueue.DeadLetterEnabled" />
+                    <label class="form-check-label">Enable Dead Letter Queue</label>
+                </div>
+                @if (_newQueue.DeadLetterEnabled)
+                {
+                    <div class="mb-3">
+                        <label class="form-label">Dead Letter Queue Name</label>
+                        <InputText class="form-control" @bind-Value="_newQueue.DeadLetterQueue" />
+                    </div>
+                }
+                <button type="submit" class="btn btn-primary">Create</button>
+                <button type="button" class="btn btn-secondary ms-2" @onclick="() => _showCreate = false">Cancel</button>
+            </div>
+        </div>
+    </EditForm>
+}
+
+<div class="mb-3">
+    <button type="button" class="btn btn-primary" @onclick="() => _showCreate = !_showCreate">
+        @(_showCreate ? "Hide Form" : "Create Queue")
+    </button>
+    <button class="btn btn-outline-secondary ms-2" @onclick="async () => await LoadQueues()">Refresh</button>
+</div>
+
+@if (_queues == null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Messages</th>
+                <th>DLQ</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var queue in _queues)
+            {
+                <tr>
+                    <td>@queue.Name</td>
+                    <td>@queue.MessageCount</td>
+                    <td>@(queue.IsDeadLetterQueue ? "Yes" : "No")</td>
+                    <td>
+                        <button class="btn btn-sm btn-info" @onclick="() => ViewQueue(queue.Name)">View</button>
+                        <button class="btn btn-sm btn-warning" @onclick="() => PurgeClick(queue.Name)">Purge</button>
+                        <button class="btn btn-sm btn-danger" @onclick="() => DeleteClick(queue.Name)">Delete</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (_selectedQueue != null)
+{
+    <div class="card mt-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span>Queue Info: @_selectedQueue.Name</span>
+            <button class="btn btn-sm btn-close" @onclick="() => _selectedQueue = null"></button>
+        </div>
+        <div class="card-body">
+            <p><strong>Messages:</strong> @_selectedQueue.MessageCount</p>
+            <p><strong>Consumers:</strong> @_selectedQueue.ConsumerCount</p>
+            <p><strong>DLQ Messages:</strong> @_selectedQueue.DeadLetterCount</p>
+            @if (_queueStats != null)
+            {
+                <h6>Stats</h6>
+                <p>Published: @_queueStats.PublishedTotal</p>
+                <p>Consumed: @_queueStats.ConsumedTotal</p>
+                <p>Acknowledged: @_queueStats.AcknowledgedTotal</p>
+                <p>Rejected: @_queueStats.RejectedTotal</p>
+                <p>Expired: @_queueStats.ExpiredTotal</p>
+            }
+        </div>
+    </div>
+}
+
+@if (_showConfirm)
+{
+    <div style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000;">
+        <div style="width:400px; margin:100px auto; background:white; padding:20px; border-radius:5px;">
+            <h5>Confirm @_confirmAction</h5>
+            <hr />
+            <p>Are you sure you want to @_confirmAction queue "@_confirmQueueName"?</p>
+            @if (_confirmAction == "purge")
+            {
+                <p style="color:orange;">This will remove all messages from the queue.</p>
+            }
+            @if (_confirmAction == "delete")
+            {
+                <p style="color:red;">This action cannot be undone.</p>
+            }
+            <div>
+                <button class="btn btn-secondary me-2" @onclick="() => _showConfirm = false">Cancel</button>
+                <button class="btn @(_confirmAction == "delete" ? "btn-danger" : "btn-warning")"
+                        @onclick="async () => await ExecuteConfirmedAction()">Confirm</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<QueueInfo>? _queues;
+    private GetQueueInfoResponse? _selectedQueue;
+    private QueueStats? _queueStats;
+    private bool _showCreate = false;
+    private bool _showConfirm = false;
+    private string _confirmAction = "";
+    private string _confirmQueueName = "";
+    private CreateQueueRequest _newQueue = new();
+    private string _message = "";
+    private string _messageType = "success";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadQueues();
+    }
+
+    private async Task LoadQueues()
+    {
+        try
+        {
+            var cts = new CancellationTokenSource();
+            var response = await QueueClient.ListQueues(cts.Token);
+            _queues = response.Queues.ToList();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Error loading queues: {ex.Message}", "error");
+        }
+    }
+
+    private async Task ViewQueue(string name)
+    {
+        try
+        {
+            var cts = new CancellationTokenSource();
+            var response = await QueueClient.GetQueueInfo(new GetQueueInfoRequest { Name = name }, cts.Token);
+            _selectedQueue = response;
+            _queueStats = response.Stats;
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Error loading queue info: {ex.Message}", "error");
+        }
+    }
+
+    private void PurgeClick(string queueName)
+    {
+        _confirmAction = "purge";
+        _confirmQueueName = queueName;
+        _showConfirm = true;
+    }
+
+    private void DeleteClick(string queueName)
+    {
+        _confirmAction = "delete";
+        _confirmQueueName = queueName;
+        _showConfirm = true;
+    }
+
+    private async Task ExecuteConfirmedAction()
+    {
+        _showConfirm = false;
+        if (_confirmAction == "delete")
+        {
+            await DeleteQueue(_confirmQueueName);
+        }
+        else if (_confirmAction == "purge")
+        {
+            await PurgeQueue(_confirmQueueName);
+        }
+    }
+
+    private async Task DeleteQueue(string name)
+    {
+        try
+        {
+            var cts = new CancellationTokenSource();
+            var response = await QueueClient.DeleteQueue(new DeleteQueueRequest { Name = name }, cts.Token);
+            if (response.Success)
+            {
+                ShowMessage($"Queue '{name}' deleted successfully.", "success");
+                if (_selectedQueue?.Name == name) _selectedQueue = null;
+                await LoadQueues();
+            }
+            else
+            {
+                ShowMessage($"Failed to delete queue '{name}'.", "error");
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Error deleting queue: {ex.Message}", "error");
+        }
+    }
+
+    private async Task PurgeQueue(string name)
+    {
+        try
+        {
+            var cts = new CancellationTokenSource();
+            var response = await QueueClient.PurgeQueue(new PurgeQueueRequest { Name = name }, cts.Token);
+            if (response.QueueFound)
+            {
+                ShowMessage($"Queue '{name}' purged. {response.MessagesRemoved} messages removed.", "success");
+                if (_selectedQueue?.Name == name)
+                {
+                    await ViewQueue(name);
+                }
+            }
+            else
+            {
+                ShowMessage($"Queue '{name}' not found.", "error");
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Error purging queue: {ex.Message}", "error");
+        }
+    }
+
+    private async Task CreateQueue()
+    {
+        try
+        {
+            var cts = new CancellationTokenSource();
+            var response = await QueueClient.CreateQueue(_newQueue, cts.Token);
+            if (response.Success)
+            {
+                ShowMessage($"Queue '{_newQueue.Name}' created successfully.", "success");
+                _showCreate = false;
+                await LoadQueues();
+            }
+            else
+            {
+                ShowMessage($"Failed to create queue: {response.Error}", "error");
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Error creating queue: {ex.Message}", "error");
+        }
+    }
+
+    private void ShowMessage(string message, string type)
+    {
+        _message = message;
+        _messageType = type;
+    }
+}

@@ -8,6 +8,8 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.0" />
+        <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="9.0.9" />
+        <PackageReference Include="Microsoft.AspNetCore.Components.QuickGrid" Version="9.0.9" />
     </ItemGroup>
 
     <ItemGroup>
@@ -17,6 +19,5 @@
     <ItemGroup>
       <PackageReference Include="Grpc.Net.Client" Version="2.80.0-pre1" />
     </ItemGroup>
-
 
 </Project>

@@ -1,5 +1,11 @@
-GET http://localhost:5256/metrics/queueNameHere
+GET http://localhost:5256/api/metrics/queueNameHere
 Accept: application/json
 ###
-GET http://localhost:5256/status
+GET http://localhost:5256/api/status
+Accept: application/json
+###
+GET http://localhost:5256/api/config
+Accept: application/json
+###
+GET http://localhost:5256/api/list-queues
 Accept: application/json

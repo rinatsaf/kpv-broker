@@ -87,7 +87,7 @@ public interface IMessageStorage : IAsyncDisposable
     /// <summary>
     /// Возвращает информацию о очереди.
     /// </summary>
-    Task<QueueInfo> GetQueueInfoAsync(
+    Task<QueueInfo?> GetQueueInfoAsync(
         GetQueueInfoRequest request,
         CancellationToken ct = default);
 
@@ -127,7 +127,7 @@ public interface IMessageStorage : IAsyncDisposable
     /// <summary>
     /// Возвращает статистику по очереди.
     /// </summary>
-    Task<QueueStats> GetStatsAsync(
+    Task<QueueStats?> GetStatsAsync(
         string queueName,
         CancellationToken ct = default);
 

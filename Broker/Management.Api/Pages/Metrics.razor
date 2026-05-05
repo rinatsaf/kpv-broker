@@ -1,0 +1,62 @@
+@page "/metrics"
+@using Broker.Contracts
+@using global::Api.MonitoringClient
+@inject MonitoringClient MonitoringClient
+@rendermode RenderMode.InteractiveServer
+
+<h3>Queue Metrics</h3>
+
+<div class="row mb-3">
+    <div class="col-md-6">
+        <div class="input-group">
+            <input type="text" class="form-control" placeholder="Queue name" @bind="_queueName" />
+            <button class="btn btn-primary" @onclick="LoadMetrics">Load</button>
+        </div>
+    </div>
+</div>
+
+@if (_metrics == null)
+{
+    @if (string.IsNullOrEmpty(_queueName))
+    {
+        <p>Enter a queue name and click Load.</p>
+    }
+    else
+    {
+        <p>Loading...</p>
+    }
+}
+else
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Metric</th>
+                <th>Value</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var metric in _metrics.Metrics)
+            {
+                <tr>
+                    <td>@metric.Key</td>
+                    <td>@metric.Value</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private string _queueName = "";
+    private GetMetricsResponse? _metrics;
+
+    private async Task LoadMetrics()
+    {
+        if (string.IsNullOrWhiteSpace(_queueName))
+            return;
+
+        var cts = new CancellationTokenSource();
+        _metrics = await MonitoringClient.GetMetricsAsync(_queueName, 0, long.MaxValue, cts.Token);
+    }
+}
